@@ -94,6 +94,18 @@ def repository(api):
     raise RuntimeError('Repository names are already in use; no existing repository was changed.')
 
 
+def find_release(api, path):
+    release = api.request(path + '/releases/tags/' + TAG, missing_ok=True)
+    if release:
+        return release
+    # Draft tags may not exist yet; the owner can still retrieve their release.
+    matches = [item for item in api.request(path + '/releases?per_page=100')
+               if item['tag_name'] == TAG]
+    if len(matches) > 1:
+        raise RuntimeError('Multiple draft releases match; no assets were changed.')
+    return matches[0] if matches else None
+
+
 def publish(api, repo, path):
     files = [ROOT / 'release' / name for name in ASSETS]
     if not all(file.is_file() for file in files):
@@ -105,7 +117,7 @@ def publish(api, repo, path):
         run(['git', 'commit', '-m', 'Prepare Windows portable release and OpenAI setup'])
     sha = run(['git', 'rev-parse', 'HEAD'])
     run(['git', 'push', '-u', 'origin', 'main'])
-    release = api.request(path + '/releases/tags/' + TAG, missing_ok=True)
+    release = find_release(api, path)
     if not release:
         release = api.request(path + '/releases', 'POST', {
             'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.0.0 — Windows x64',
@@ -133,11 +145,12 @@ def publish(api, repo, path):
             if asset['size'] != file.stat().st_size or asset.get('digest') not in (None, digest):
                 raise RuntimeError('Upload verification failed: ' + file.name)
         print('Verified asset: ' + file.name + ' (' + str(asset['size']) + ' bytes)', flush=True)
-    final = api.request(path + '/releases/tags/' + TAG)
+    final = api.request(path + '/releases/' + str(release['id']))
     if set(ASSETS) - {asset['name'] for asset in final['assets']}:
         raise RuntimeError('Release has missing assets')
     if final['draft']:
-        final = api.request(path + '/releases/' + str(final['id']), 'PATCH', {'draft': False})
+        final = api.request(path + '/releases/' + str(final['id']), 'PATCH',
+                            {'draft': False, 'target_commitish': sha})
     print(json.dumps({'repository': repo['html_url'], 'private': repo['private'],
                       'release': final['html_url'], 'commit': sha}, indent=2), flush=True)
 
