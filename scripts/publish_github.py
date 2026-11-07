@@ -51,13 +51,13 @@ class GitHub:
         if file:
             content = 'text/plain' if file.suffix == '.txt' else 'application/zip'
             config += [f'header = {quote("Content-Type: " + content)}',
-                       f'data-binary = {quote("@" + file.as_posix())}']
+                       f'data-binary = {quote("@" + file.name)}']
         elif data is not None:
             config += ['header = "Content-Type: application/json"',
                        f'data-binary = {quote(json.dumps(data))}']
         proc = subprocess.run(['curl.exe', '--config', '-', '--write-out', '\n%{http_code}'],
                               input='\n'.join(config) + '\n', text=True,
-                              capture_output=True, timeout=260, cwd=ROOT)
+                              capture_output=True, timeout=260, cwd=file.parent if file else ROOT)
         if proc.returncode:
             raise RuntimeError('GitHub network request failed, curl exit ' + str(proc.returncode))
         body, _, code = proc.stdout.rpartition('\n')
@@ -109,7 +109,7 @@ def publish(api, repo, path):
     if not release:
         release = api.request(path + '/releases', 'POST', {
             'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.0.0 — Windows x64',
-            'draft': False, 'prerelease': False,
+            'draft': True, 'prerelease': False,
             'body': 'Download **StudyTools-Windows-x64.zip**, extract ALL files, then run **Start.cmd**. '
                     'Python is included. Windows x64 only.\n\n'
                     'Russian OpenAI setup and a ChatGPT handoff prompt are in **docs/**. '
@@ -136,6 +136,8 @@ def publish(api, repo, path):
     final = api.request(path + '/releases/tags/' + TAG)
     if set(ASSETS) - {asset['name'] for asset in final['assets']}:
         raise RuntimeError('Release has missing assets')
+    if final['draft']:
+        final = api.request(path + '/releases/' + str(final['id']), 'PATCH', {'draft': False})
     print(json.dumps({'repository': repo['html_url'], 'private': repo['private'],
                       'release': final['html_url'], 'commit': sha}, indent=2), flush=True)
 
