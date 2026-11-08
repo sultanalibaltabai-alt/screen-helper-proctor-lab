@@ -4,6 +4,17 @@ import time
 import urllib.request
 import urllib.error
 
+
+class NoApiRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        # API credentials and question images must never be forwarded to a redirect target.
+        raise urllib.error.HTTPError(request.full_url, code, 'API redirect refused', headers, response)
+
+
+def open_request(request, *, timeout=None):
+    # Default HTTPS context still verifies the server certificate and hostname.
+    return urllib.request.build_opener(NoApiRedirects()).open(request, timeout=timeout)
+
 def _request(request, decoder, *, timeout=None, retries=1, on_progress=None):
     deadline=None if timeout is None else time.monotonic()+timeout
     for attempt in range(min(2,max(0,int(retries)))+1):
@@ -11,7 +22,7 @@ def _request(request, decoder, *, timeout=None, retries=1, on_progress=None):
         if remaining is not None and remaining<=0:raise TimeoutError()
         try:
             if on_progress:on_progress('request')
-            with urllib.request.urlopen(request,timeout=remaining) as response:
+            with open_request(request,timeout=remaining) as response:
                 if on_progress:on_progress('receiving')
                 return decoder(response,on_progress)
         except urllib.error.HTTPError as error:

@@ -16,8 +16,14 @@ Python на целевом компьютере устанавливаться �
 это расходуемый баланс, а не безлимит. Покупку кредитов и создание ключа я выполню
 сам в своём аккаунте. Не проси прислать ключ, платёжные данные или коды входа в чат.
 
-Сначала прочитай README_RU.md, AGENTS.md, docs/PROJECT_STATE_RU.md и
-docs/OPENAI_5_USD_RU.md. Репозиторий содержит:
+В версии 8.3 Gemini настраивается через Setup-Gemini.cmd, OpenAI — через
+Setup-OpenAI.cmd. Если я выбираю Gemini, не требуй оплатить OpenAI. Ключи защищены
+Windows DPAPI и хранятся отдельно по провайдерам. На другом ПК их вводят заново.
+В ожидании выводится только число секунд, ответ виден 15 секунд. Подробные этапы
+и бессрочный показ удалены; не возвращай их без отдельной просьбы.
+
+Сначала прочитай README_RU.md, AGENTS.md, docs/PROJECT_STATE_RU.md,
+docs/SECURITY_RU.md и docs/OPENAI_5_USD_RU.md. Репозиторий содержит:
 
 - screen-helper/helper.py: OpenAI Responses API, настройка --configure-openai,
   обработка ошибок, снимок по горячей клавише, выдача подтверждённого результата;
@@ -26,6 +32,7 @@ docs/OPENAI_5_USD_RU.md. Репозиторий содержит:
 - screen-helper/inference.py и routing.py: отменяемый процесс запроса, общий лимит
   времени, кэш одинакового снимка и ограниченные повторы;
 - screen-helper/panel.py и Setup-OpenAI.cmd: окно настройки и проверка AI;
+- screen-helper/config_store.py: DPAPI, атомарное сохранение и миграция ключей;
 - proctor-lab/: независимый тренировочный сайт, расширение и Windows-компонент;
 - Build-Release.ps1 и scripts/package_project.py: сборка переносимых ZIP;
 - .github/workflows/build.yml: ручная сборка в GitHub Actions.

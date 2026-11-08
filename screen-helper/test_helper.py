@@ -42,7 +42,7 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(config['request_timeout'],60)
         self.assertEqual(helper.normalize_config({'request_timeout':'invalid'})['request_timeout'],60)
         self.assertEqual(helper.normalize_config({'request_timeout':0})['request_timeout'],60)
-        self.assertEqual(helper.normalize_config({'settings_version':8,'request_timeout':0})['request_timeout'],0)
+        self.assertEqual(helper.normalize_config({'settings_version':8,'request_timeout':0})['request_timeout'],60)
         self.assertEqual(helper.normalize_config({'request_timeout':180})['request_timeout'],180)
 
     def test_partial_output_is_not_shown_as_a_final_answer(self):
@@ -57,7 +57,7 @@ class HelperTests(unittest.TestCase):
     def test_google_request_never_uses_openai_host_or_authorization(self):
         body = {"candidates": [{"content": {"parts": [{"text": "B"}]}}]}
         with patch.dict(os.environ, {}, clear=True), \
-             patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())) as send:
+             patch("api_transport.open_request", return_value=io.BytesIO(json.dumps(body).encode())) as send:
             self.assertEqual(helper.ask(b"fake-image", {"api_key": "AIzaFAKE", "model": "gemini-2.5-flash","gemini_api":"generate_content"}), "B")
         request = send.call_args.args[0]
         self.assertGreater(send.call_args.kwargs['timeout'],0)
@@ -69,7 +69,7 @@ class HelperTests(unittest.TestCase):
 
     def test_streaming_google_request_uses_the_stream_endpoint_and_validates_final_json(self):
         body=b'data: {"candidates":[{"content":{"parts":[{"text":"B"}]},"finishReason":"STOP"}]}\n\n'
-        with patch.dict(os.environ,{},clear=True),patch('urllib.request.urlopen',return_value=io.BytesIO(body)) as send:
+        with patch.dict(os.environ,{},clear=True),patch('api_transport.open_request',return_value=io.BytesIO(body)) as send:
             self.assertEqual(helper.ask(b'fake-image',{'api_key':'AIzaFAKE','streaming':True,'gemini_api':'generate_content'}),'B')
         self.assertTrue(send.call_args.args[0].full_url.endswith(':streamGenerateContent?alt=sse'))
 
@@ -212,9 +212,10 @@ class HelperTests(unittest.TestCase):
                 helper.main()
         self.assertIn("B", seen)
         self.assertEqual(seen.count("B"), 2)
-        self.assertTrue(any('ожидание API' in text for text in seen),seen)
+        self.assertTrue(any(text.isdecimal() for text in seen),seen)
+        self.assertTrue(all(text=='B' or text.isdecimal() for text in seen),seen)
         self.assertTrue(states[0][0], states)
-        self.assertGreater(states[0][1], 20, states)
+        self.assertGreater(states[0][1], 4, states)
         self.assertGreater(states[0][2], 10, states)
         for state in states:
             self.assertNotEqual(state[3], state[4], "Overlay became foreground window")

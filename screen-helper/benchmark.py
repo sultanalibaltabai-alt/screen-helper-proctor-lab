@@ -1,15 +1,16 @@
 """Same images and reference answers per provider. No invented GPT results."""
 import json,time
 from pathlib import Path
+from config_store import load_config
 
 def run(base):
  import helper
  from quiz_samples import cases
- base=Path(base);primary=json.loads((base/'config.local.json').read_text(encoding='utf-8-sig'))
+ base=Path(base);primary=load_config(base/'config.local.json')
  configs={helper.normalize_config(primary)['provider']:primary}
  for provider in ('openai','gemini'):
   path=base/(provider+'.local.json')
-  if path.exists():configs[provider]=json.loads(path.read_text(encoding='utf-8-sig'))
+  if path.exists():configs[provider]=load_config(path)
  report={'desktop_captured':False,'providers':{}}
  for provider in ('gemini','openai'):
   if provider not in configs:

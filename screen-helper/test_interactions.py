@@ -7,7 +7,7 @@ class InteractionTests(unittest.TestCase):
   error=urllib.error.HTTPError('https://example.test',503,'busy',{},io.BytesIO(b'{}'))
   body={'status':'completed','model':'gemini-3.5-flash','steps':[{'type':'model_output','content':[{'type':'text','text':'B'}]}]}
   metrics={}
-  with patch('urllib.request.urlopen',side_effect=[error,io.BytesIO(json.dumps(body).encode())]) as send,patch('api_transport.time.sleep'):
+  with patch('api_transport.open_request',side_effect=[error,io.BytesIO(json.dumps(body).encode())]) as send,patch('api_transport.time.sleep'):
    self.assertEqual(helper.ask(b'test',{'api_key':'AQ.FAKE','model':'gemini-3.5-flash','_metrics':metrics}),'B')
   self.assertEqual(send.call_count,2)
   self.assertEqual(json.loads(send.call_args.args[0].data)['generation_config']['thinking_level'],'medium')
@@ -35,7 +35,7 @@ class InteractionTests(unittest.TestCase):
   response['status']='failed';self.assertEqual(helper.extract_interactions_answer(response),'API: generation failed')
  def test_request_routes_new_google_auth_keys_to_interactions(self):
   response={'status':'completed','steps':[{'type':'model_output','content':[{'type':'text','text':'B'}]}]}
-  with patch.dict(os.environ,{},clear=True),patch('urllib.request.urlopen',return_value=io.BytesIO(json.dumps(response).encode())) as send:
+  with patch.dict(os.environ,{},clear=True),patch('api_transport.open_request',return_value=io.BytesIO(json.dumps(response).encode())) as send:
    self.assertEqual(helper.ask(b'fake-image',{'api_key':'AQ.FAKE-KEY','model':'gemini-3.8-flash','streaming':True}),'B')
   request=send.call_args.args[0]
   self.assertEqual(request.full_url,'https://generativelanguage.googleapis.com/v1beta/interactions')

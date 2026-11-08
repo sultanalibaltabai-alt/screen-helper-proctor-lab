@@ -22,7 +22,7 @@ class RequestProgress:
                 'elapsed_seconds':round(max(0,now-self.started),1),'stage_seconds':round(max(0,now-self.changed),1)}
     def text(self):
         value=self.snapshot()
-        return f"{value['label']} · {int(value['elapsed_seconds'])} с"
+        return str(int(value['elapsed_seconds']))
 
 def save_status(path,value):
     temporary=path.with_suffix('.tmp')

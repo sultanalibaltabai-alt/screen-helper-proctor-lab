@@ -10,9 +10,10 @@ def source_files():
     for path in ROOT.rglob('*'):
         if not path.is_file():continue
         relative=path.relative_to(ROOT);parts=relative.parts
-        if any(x in {'.git','release','build','build-v2','dist-v2','__pycache__','node_modules','.venv'} for x in parts):continue
+        if any(x in {'.git','.openai','release','build','build-v2','dist-v2','__pycache__','node_modules','.venv'} for x in parts):continue
+        if path.name=='.env' or path.name.startswith('.env.'):continue
         if parts[:3] in [('proctor-lab','native','dist'),('proctor-lab','native','build')]:continue
-        if path.suffix in ('.zip','.spec','.log') or path.name.endswith(('.local.json','-check.json')):continue
+        if path.suffix in ('.zip','.spec','.log') or path.name.endswith(('.local.json','.local.tmp','-check.json')):continue
         if path.name in ('process-status.json','last-result.json','last-recognition.json','benchmark.json'):continue
         if path.name.startswith('native-proof'):continue
         files.append(path)
@@ -20,7 +21,7 @@ def source_files():
 
 def package():
     OUT.mkdir(exist_ok=True)
-    helper=ROOT/'screen-helper-portable-v8.2.zip'
+    helper=ROOT/'screen-helper-portable-v8.3.zip'
     native=ROOT/'proctor-lab-windows-v3.zip'
     for source,name in [(helper,'ScreenHelper-Windows-x64.zip'),(native,'ProctorLab-Windows-x64.zip')]:
         if not source.is_file():raise RuntimeError('Build missing: '+source.name)

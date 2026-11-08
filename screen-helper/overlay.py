@@ -134,7 +134,7 @@ class Overlay:
             raise ctypes.WinError(ctypes.get_last_error())
         self.last_size = picture.size
         self.last_rect = (x, y, x+picture.width, y+picture.height)
-        self.deadline = None if persistent else time.monotonic() + float(self.config.get("display_seconds", 2))
+        self.deadline = None if persistent else time.monotonic() + float(self.config.get("display_seconds", 15))
 
     def _upload(self, picture, x, y):
         desktop_dc = self.user.GetDC(None)
@@ -178,6 +178,12 @@ class Overlay:
         if self.hwnd:
             self.user.ShowWindow(self.hwnd, 0)
         self.deadline = None
+
+    def expire(self, now=None):
+        if self.deadline is not None and (time.monotonic() if now is None else now) >= self.deadline:
+            self.hide()
+            return True
+        return False
 
     def close(self):
         if self.hwnd:

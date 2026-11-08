@@ -7,7 +7,7 @@ import helper
 class CredentialTests(unittest.TestCase):
  def test_explicitly_saved_key_has_priority_over_an_old_environment_key(self):
   body={'status':'completed','steps':[{'type':'model_output','content':[{'type':'text','text':'B'}]}]}
-  with patch.dict(os.environ,{'GEMINI_API_KEY':'AQ.OLD-FAKE'},clear=True),patch('urllib.request.urlopen',return_value=io.BytesIO(json.dumps(body).encode())) as send:
+  with patch.dict(os.environ,{'GEMINI_API_KEY':'AQ.OLD-FAKE'},clear=True),patch('api_transport.open_request',return_value=io.BytesIO(json.dumps(body).encode())) as send:
    self.assertEqual(helper.ask(b'test',{'api_key':'AQ.SAVED-FAKE','provider_mode':'gemini'}),'B')
   self.assertEqual(send.call_args.args[0].get_header('X-goog-api-key'),'AQ.SAVED-FAKE')
  def test_google_auth_keys_fix_the_old_openai_model_selection(self):
@@ -19,14 +19,14 @@ class CredentialTests(unittest.TestCase):
   self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],'gemini-3.8-flash')
   self.assertIsNone(key_problem(config['api_key']))
  def test_new_auth_key_is_sent_only_in_the_google_header(self):
-  with patch.dict(os.environ,{},clear=True),patch('urllib.request.urlopen',return_value=io.BytesIO(b'{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"B"}]}]}')) as send:
+  with patch.dict(os.environ,{},clear=True),patch('api_transport.open_request',return_value=io.BytesIO(b'{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"B"}]}]}')) as send:
    self.assertEqual(helper.ask(b'fake-image',{'api_key':'AQ.FAKE-AUTH-KEY','model':'gpt-4.1-mini'}),'B')
   request=send.call_args.args[0]
   self.assertTrue(request.full_url.startswith('https://generativelanguage.googleapis.com/'))
   self.assertEqual(request.get_header('X-goog-api-key'),'AQ.FAKE-AUTH-KEY')
   self.assertNotIn('AQ.FAKE',request.full_url);self.assertIsNone(request.get_header('Authorization'))
  def test_wrong_explicit_service_does_not_receive_a_recognized_key(self):
-  with patch('urllib.request.urlopen') as send:
+  with patch('api_transport.open_request') as send:
    self.assertEqual(helper.ask(b'fake-image',{'api_key':'AQ.FAKE','provider_mode':'openai'}),'API: key/provider mismatch')
    send.assert_not_called()
  def test_pasted_quotes_and_bom_are_cleaned_but_masked_keys_are_rejected(self):
@@ -50,7 +50,7 @@ class CredentialTests(unittest.TestCase):
    try:
     with patch.object(helper,'CONFIG',path),patch.object(tk,'Tk',return_value=root),patch.object(root,'mainloop',side_effect=fill_and_save),patch('tkinter.messagebox.showinfo'),patch('tkinter.messagebox.showerror') as error:
      helper.configure_gui({'provider':'openai','model':'gpt-4.1-mini'})
-    error.assert_not_called();config=json.loads(path.read_text(encoding='utf-8'))
+    error.assert_not_called();config=helper.load_config(path)
     self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],'gemini-3.8-flash');self.assertEqual(config['api_key'],'AQ.FAKE-GUI-KEY')
    finally:
     try:root.destroy()

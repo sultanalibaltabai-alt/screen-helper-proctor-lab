@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENV = dict(os.environ, GCM_INTERACTIVE='never', GIT_TERMINAL_PROMPT='0')
 ASSETS = ('StudyTools-Windows-x64.zip', 'ScreenHelper-Windows-x64.zip',
           'ProctorLab-Windows-x64.zip', 'Project-Source.zip', 'SHA256SUMS.txt')
-TAG = 'v1.0.0'
+TAG = 'v1.1.0'
 
 
 def run(args, **kwargs):
@@ -114,15 +114,19 @@ def publish(api, repo, path):
     run(['git', 'add', '--', '.'])
     changed = run(['git', 'status', '--porcelain'])
     if changed:
-        run(['git', 'commit', '-m', 'Prepare Windows portable release and OpenAI setup'])
+        run(['git', 'commit', '-m', 'Protect API credentials and simplify the result display'])
     sha = run(['git', 'rev-parse', 'HEAD'])
     run(['git', 'push', '-u', 'origin', 'main'])
     release = find_release(api, path)
     if not release:
         release = api.request(path + '/releases', 'POST', {
-            'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.0.0 — Windows x64',
+            'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.1.0 — Screen Helper 8.3',
             'draft': True, 'prerelease': False,
-            'body': 'Download **StudyTools-Windows-x64.zip**, extract ALL files, then run **Start.cmd**. '
+            'body': 'Screen Helper 8.3: Gemini and OpenAI setup, encrypted Windows-user API keys, '
+                    'seconds-only waiting indicator and 15-second answer display. '
+                    'Legacy persistent/debug overlay settings are removed. '
+                    'API redirects are refused; recognized questions and answer history are no longer saved in normal use.\n\n'
+                    'Download **StudyTools-Windows-x64.zip**, extract ALL files, then run **Start.cmd**. '
                     'Python is included. Windows x64 only.\n\n'
                     'Russian OpenAI setup and a ChatGPT handoff prompt are in **docs/**. '
                     'An API key and funded API balance must be supplied by the owner locally. '

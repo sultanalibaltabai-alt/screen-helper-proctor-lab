@@ -17,7 +17,7 @@ def verify():
         for key, value in config.items():
             if 'key' in key.lower() and isinstance(value, str) and len(value) > 25:
                 secret_values.add(value.encode())
-    signatures = re.compile(rb'(?:sk-(?:proj-)?[A-Za-z0-9_-]{35,}|AIza[A-Za-z0-9_-]{32,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{35,})')
+    signatures = re.compile(rb'(?:sk-(?:proj-)?[A-Za-z0-9_-]{35,}|AIza[A-Za-z0-9_-]{32,}|AQ\.[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{35,})')
     checked = 0
 
     def inspect(name, data):
@@ -47,7 +47,7 @@ def verify():
                 if member.is_dir():
                     continue
                 parts = Path(member.filename).parts
-                forbidden = member.filename.endswith('.local.json') or '.env' in parts or '.git' in parts
+                forbidden = member.filename.endswith(('.local.json','.local.tmp')) or any(p=='.env' or p.startswith('.env.') or p in ('.git','.openai') for p in parts)
                 if forbidden or any(part in ('api-check.json','last-result.json','self-check.json','native-self-check.json') for part in parts):
                     raise RuntimeError('Private configuration/report found in ' + name)
                 inspect(name + ':' + member.filename, archive.read(member))
