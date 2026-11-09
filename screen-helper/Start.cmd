@@ -4,12 +4,10 @@ cd /d "%~dp0"
 if exist "ScreenHelper.exe" goto portable
 if not exist "helper.py" goto incomplete
 if not exist ".venv\Scripts\pythonw.exe" goto missing
-if not exist "config.local.json" goto missing
 start "" ".venv\Scripts\pythonw.exe" "%~dp0helper.py"
 exit /b 0
 :portable
 if not exist "_internal\python313.dll" goto incomplete
-if not exist "config.local.json" goto missing
 start "" "%~dp0ScreenHelper.exe"
 exit /b 0
 :missing

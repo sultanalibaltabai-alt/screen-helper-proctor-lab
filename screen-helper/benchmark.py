@@ -20,7 +20,7 @@ def run(base):
   if config['provider']!=provider:
    report['providers'][provider]={'status':'provider_mismatch'};continue
   for name,image,expected in cases(base):
-   start=time.monotonic();answer,_=router.run(image,dict(config,cache_results=False,request_timeout=config['request_timeout'] or 60))
+   start=time.monotonic();answer,_=router.run(image,dict(config,cache_results=False,request_timeout=config['request_timeout'] or 60,output_mode='compact'))
    results.append({'case':name,'answer':answer,'expected':expected,'ok':answer==expected,'request_ok':not answer.startswith(('API:','Capture/')),'seconds':round(time.monotonic()-start,2)})
    if answer.startswith(('API:','Capture/')):break
   report['providers'][provider]={'status':'tested','model':config['model'],'correct':sum(r['ok'] for r in results),'requests_attempted':len(results),'answers_received':sum(r['request_ok'] for r in results),'api_errors':sum(not r['request_ok'] for r in results),'results':results}

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENV = dict(os.environ, GCM_INTERACTIVE='never', GIT_TERMINAL_PROMPT='0')
 ASSETS = ('StudyTools-Windows-x64.zip', 'ScreenHelper-Windows-x64.zip',
           'ProctorLab-Windows-x64.zip', 'Project-Source.zip', 'SHA256SUMS.txt')
-TAG = 'v1.1.0'
+TAG = 'v1.2.0'
 
 
 def run(args, **kwargs):
@@ -114,27 +114,25 @@ def publish(api, repo, path):
     run(['git', 'add', '--', '.'])
     changed = run(['git', 'status', '--porcelain'])
     if changed:
-        run(['git', 'commit', '-m', 'Protect API credentials and simplify the result display'])
+        run(['git', 'commit', '-m', 'Add full quiz answers and shared cloud gateway'])
     sha = run(['git', 'rev-parse', 'HEAD'])
     run(['git', 'push', '-u', 'origin', 'main'])
     release = find_release(api, path)
     if not release:
         release = api.request(path + '/releases', 'POST', {
-            'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.1.0 — Screen Helper 8.3',
+            'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.2.0 — Screen Helper 8.4',
             'draft': True, 'prerelease': False,
-            'body': 'Screen Helper 8.3: Gemini and OpenAI setup, encrypted Windows-user API keys, '
-                    'seconds-only waiting indicator and 15-second answer display. '
-                    'Legacy persistent/debug overlay settings are removed. '
-                    'API redirects are refused; recognized questions and answer history are no longer saved in normal use.\n\n'
-                    'Download **StudyTools-Windows-x64.zip**, extract ALL files, then run **Start.cmd**. '
-                    'Python is included. Windows x64 only.\n\n'
-                    'Russian OpenAI setup and a ChatGPT handoff prompt are in **docs/**. '
-                    'An API key and funded API balance must be supplied by the owner locally. '
-                    'No keys or personal settings are included.\n\n'
-                    'Offline tests and portable self-checks passed. A funded OpenAI call and '
-                    'a second physical computer have not been tested. Proctor Lab is an independent '
-                    'training stand; OES compatibility or undetectability is not guaranteed.\n\n'
-                    'Source archive and SHA-256 checksums are included.',
+            'body': 'Screen Helper 8.4: full choice text, MSQ, matching, ordering, fill-in blanks, code and drag/drop instructions. '
+                    'Readable scrollable results for 15 seconds; seconds-only waiting indicator. No automatic quiz interaction.\n\n'
+                    'Download **ScreenHelper-Windows-x64.zip** for the helper alone, extract ALL files, then run **ScreenHelper/Start.cmd**. '
+                    '**StudyTools-Windows-x64.zip** also includes Proctor Lab. Windows x64; Python is included.\n\n'
+                    'New installs select the shared cloud service automatically: no provider key is distributed in the ZIP. '
+                    '**The gateway is deployed but the model is NOT enabled yet: the owner has not added a key or funding.** '
+                    'See docs/CLOUD_OWNER_RU.md for the one-time server setup. Direct Gemini/OpenAI profiles are still supported.\n\n'
+                    'Provider keys remain server-side. Global/per-installation limits protect the shared quota; $5 is spendable API credit, not unlimited access. '
+                    'Offline tests, SQLite gateway tests, real cloud connectivity and portable self-checks passed. '
+                    'No live funded model response or second physical PC was tested. No OES compatibility or undetectability guarantee.\n\n'
+                    'Source archive and SHA-256 checksums are included.'
         })
     existing = {asset['name']: asset for asset in release.get('assets', [])}
     for file in files:

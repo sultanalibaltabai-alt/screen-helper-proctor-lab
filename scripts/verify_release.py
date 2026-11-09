@@ -17,7 +17,7 @@ def verify():
         for key, value in config.items():
             if 'key' in key.lower() and isinstance(value, str) and len(value) > 25:
                 secret_values.add(value.encode())
-    signatures = re.compile(rb'(?:sk-(?:proj-)?[A-Za-z0-9_-]{35,}|AIza[A-Za-z0-9_-]{32,}|AQ\.[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{35,})')
+    signatures = re.compile(rb'(?:STC_[a-f0-9]{64}|sk-(?:proj-)?[A-Za-z0-9_-]{35,}|AIza[A-Za-z0-9_-]{32,}|AQ\.[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{35,})')
     checked = 0
 
     def inspect(name, data):

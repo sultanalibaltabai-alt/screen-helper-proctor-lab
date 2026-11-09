@@ -2,14 +2,16 @@
 import base64
 import ctypes
 from ctypes import wintypes
-from answers import ANSWER_SCHEMA, PROMPT, format_answers
+from answers import ANSWER_SCHEMA, PROMPT, format_answers, is_control_answer
 from overlay import Overlay
+from result_window import ResultWindow
 from api_transport import request_json,request_gemini_stream
 from progress import RequestProgress,save_status
 from capture import target as capture_target, capture_image, CaptureError
 from credentials import clean_key,detect_provider,key_problem,select_provider
 from config_store import load_config, save_config, ConfigError
 from presentation import result_kind, result_text, result_report
+from cloud_client import GATEWAY_URL
 import getpass
 import io
 import json
@@ -32,10 +34,25 @@ BASE = (Path(sys.executable) if getattr(sys, "frozen", False) else Path(__file__
 CONFIG = BASE / "config.local.json"
 HOTKEY_MODIFIERS = 0x4003
 MUTEX_NAME = "Local\\ScreenHelperSingleInstance"
-DEFAULT_MODELS = {"openai": "gpt-5.4-mini", "gemini": "gemini-3.8-flash"}
+DEFAULT_MODELS = {"openai": "gpt-5.4-mini", "gemini": "gemini-3.8-flash","cloud":"cloud-managed"}
+
+
+def load_active_config(path=None):
+    path=CONFIG if path is None else Path(path)
+    if not path.exists():
+        value=normalize_config({'provider_mode':'cloud','provider':'cloud'})
+        save_config(path,value)
+        return value
+    return normalize_config(load_config(path))
 
 def configure_openai():
     configure_provider('openai')
+
+
+def activate_cloud():
+    value=normalize_config(dict(load_config(CONFIG,for_setup=True),provider_mode='cloud',provider='cloud'))
+    save_config(CONFIG,value)
+    ctypes.windll.user32.MessageBoxW(None,'Выбран общий сервис. API-ключ на этом ПК вводить не нужно.\nОткрой Control.cmd и проверь AI. Модель включится после настройки владельцем сервиса.','Screen Helper',0x40)
 
 
 def configure_provider(provider):
@@ -46,7 +63,7 @@ def configure_provider(provider):
     if current['provider']!=provider and not profile.exists():selected['api_key']=''
     selected.update(provider_mode=provider,provider=provider,model=selected.get('model') or DEFAULT_MODELS[provider])
     selected=normalize_config(selected)
-    if provider=='openai':selected['fallback_model']=''
+    if provider in ('openai','cloud'):selected['fallback_model']=''
     configure_gui(selected)
 
 def configure():
@@ -70,9 +87,9 @@ def configure():
 
 def normalize_config(config):
     result = dict(config)
-    if result.get('provider_mode','auto') not in ('auto','gemini','openai'):
+    if result.get('provider_mode','auto') not in ('auto','gemini','openai','cloud'):
         result['provider_mode']='auto'
-    if result.get('provider') not in (None,'gemini','openai'):
+    if result.get('provider') not in (None,'gemini','openai','cloud'):
         result.pop('provider',None)
     key = clean_key(result.get("api_key", ""))
     provider = select_provider(key,result)
@@ -106,6 +123,9 @@ def normalize_config(config):
     result['fallback_model']=str(result.get('fallback_model','')).strip()
     if result['fallback_model'] and not result['fallback_model'].startswith('gemini-'):result['fallback_model']=''
     result['cache_results']=result.get('cache_results',True) is True
+    result['cloud_url']=str(result.get('cloud_url') or GATEWAY_URL)
+    if provider=='cloud':
+        result.update(api_key='',model=DEFAULT_MODELS['cloud'],fallback_model='',api_retries=0)
     result.pop("thinking_budget", None)
     return result
 
@@ -172,7 +192,7 @@ def configure_gui(old):
     from tkinter import messagebox
     root = tk.Tk()
     old = normalize_config(old)
-    root.title("Screen Helper v8.3 — настройка API")
+    root.title("Screen Helper v8.4 — настройка API")
     root.geometry(f"620x{min(720,max(400,root.winfo_screenheight()-100))}")
     root.minsize(560,360)
     outer=tk.Frame(root);outer.pack(fill='both',expand=True)
@@ -185,7 +205,7 @@ def configure_gui(old):
     frame.bind('<Configure>',lambda event:canvas.configure(scrollregion=canvas.bbox('all')))
     canvas.bind('<Configure>',lambda event:canvas.itemconfigure(content,width=event.width))
     root.bind('<MouseWheel>',lambda event:canvas.yview_scroll(-int(event.delta/120),'units'))
-    provider_options={'Авто по ключу':'auto','Google Gemini':'gemini','OpenAI':'openai'}
+    provider_options={'Авто по ключу':'auto','Google Gemini':'gemini','OpenAI':'openai','Общий облачный сервис':'cloud'}
     provider_mode=tk.StringVar(value=next(label for label,value in provider_options.items() if value==old['provider_mode']))
     tk.Label(frame,text='Сервис API (для ключа Google выбери Google Gemini):').pack(anchor='w')
     tk.OptionMenu(frame,provider_mode,*provider_options,command=lambda *_:update_provider()).pack(anchor='w',pady=(0,8))
@@ -196,6 +216,7 @@ def configure_gui(old):
             saved_keys[provider]=load_config(path,for_setup=True).get('api_key','')
     def selected_key():
         mode=provider_options[provider_mode.get()]
+        if mode=='cloud':return ''
         return clean_key(key_value.get()) or saved_keys.get(old['provider'] if mode=='auto' else mode,'')
     tk.Label(frame, text="Ключ API: защищается учётной записью Windows").pack(anchor="w")
     if old.get('_key_load_error'):
@@ -243,15 +264,27 @@ def configure_gui(old):
         updated = normalize_config(dict(old,api_key=key,model=model_entry.get(),provider_mode=provider_options[provider_mode.get()]))
         service.set("Сервис: " + updated["provider"])
         if updated["model"] != model_entry.get():
+            model_entry.configure(state='normal')
             model_entry.delete(0, "end")
             model_entry.insert(0, updated["model"])
+        cloud=provider_options[provider_mode.get()]=='cloud'
+        key_entry.configure(state='disabled' if cloud else 'normal')
+        model_entry.configure(state='disabled' if cloud else 'normal')
     key_value.trace_add("write", update_provider)
+    update_provider()
     tk.Label(frame, text="Ctrl+Alt+S отправляет выбранное окно/монитор в API.\n"
              "Снимки могут содержать личные данные. Нужен доступный API-лимит.",
              justify="left").pack(anchor="w")
 
     def save():
         mode=provider_options[provider_mode.get()]
+        if mode=='cloud' or (mode=='auto' and not selected_key() and old['provider']=='cloud'):
+            value=normalize_config(dict(old,provider_mode='cloud',provider='cloud'))
+            try:save_config(CONFIG,value)
+            except (OSError,ConfigError):
+                messagebox.showerror('Настройка','Не удалось сохранить настройки. Распакуй ZIP в доступную папку.',parent=root);return
+            messagebox.showinfo('Общий сервис','Выбран общий сервис. Ключ провайдера на этом ПК не нужен.\nЕсли модель ещё не подключена владельцем, панель сообщит об этом.',parent=root)
+            root.destroy();return
         environment_key=os.environ.get('GEMINI_API_KEY','') if mode in ('auto','gemini') else ''
         if not environment_key and mode in ('auto','openai'):environment_key=os.environ.get('OPENAI_API_KEY','')
         key = selected_key() or clean_key(environment_key)
@@ -317,7 +350,7 @@ def payload(png, model, reasoning_mode='balanced'):
     return result
 
 
-def extract_answer(data):
+def extract_answer(data,compact=False):
     if data.get('status') == 'incomplete':
         return 'API: incomplete response'
     if data.get('status') not in (None,'completed'):return 'API: response not completed'
@@ -326,8 +359,8 @@ def extract_answer(data):
     parts = [p.get("text", "") for item in data.get("output", [])
              if item.get("type") == "message" for p in item.get("content", [])
              if p.get("type") == "output_text"]
-    answer = " ".join(" ".join(parts).split())
-    return format_answers(answer)
+    answer = "".join(parts)
+    return format_answers(answer,compact=compact)
 
 
 def gemini_payload(png, model, reasoning_mode='balanced'):
@@ -355,12 +388,12 @@ def interactions_text(data):
     return ''.join(part.get('text','') for step in data.get('steps',[]) if step.get('type')=='model_output'
                    for part in step.get('content',[]) if part.get('type')=='text')
 
-def extract_interactions_answer(data):
+def extract_interactions_answer(data,compact=False):
     if data.get('status')=='failed':return 'API: generation failed'
     if data.get('status')!='completed':return 'API: response not completed'
-    return format_answers(interactions_text(data))
+    return format_answers(interactions_text(data),compact=compact)
 
-def extract_gemini_answer(data):
+def extract_gemini_answer(data,compact=False):
     candidates = data.get("candidates", [])
     if not candidates:
         return "API: no candidate"
@@ -371,7 +404,7 @@ def extract_gemini_answer(data):
         return 'API: response not completed'
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
-    return format_answers(text)
+    return format_answers(text,compact=compact)
 
 
 def network_error(error):
@@ -394,13 +427,16 @@ def network_error(error):
 def network_check():
     """Unauthenticated connectivity check. No key, screenshots, or paid inference."""
     started = time.monotonic()
-    config = normalize_config(load_config(CONFIG)) if CONFIG.exists() else {"provider": "openai"}
+    config = normalize_config(load_config(CONFIG)) if CONFIG.exists() else normalize_config({'provider_mode':'cloud','provider':'cloud'})
     host = "generativelanguage.googleapis.com" if config["provider"] == "gemini" else "api.openai.com"
     url = f"https://{host}/v1beta/models" if config["provider"] == "gemini" else f"https://{host}/v1/models"
+    if config['provider']=='cloud':
+        url=config['cloud_url'].rstrip('/')+'/health';host=urllib.parse.urlsplit(url).hostname
     report = {"version": 7, "host": host, "key_sent": False, "image_sent": False}
     try:
-        with urllib.request.urlopen(url, timeout=15) as response:
+        with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'ScreenHelper/8.4'}), timeout=15) as response:
             report.update(connection="reachable", http_status=response.status)
+            if config['provider']=='cloud':report['cloud_ready']=json.load(response).get('ready') is True
     except urllib.error.HTTPError as error:
         report.update(connection="reachable", http_status=error.code)
         if error.code == 401:
@@ -417,6 +453,9 @@ def network_check():
 def ask(png, config):
     config = normalize_config(config)
     provider = config["provider"]
+    if provider=='cloud':
+        from cloud_client import infer
+        return infer(png,config,BASE,config.get('_metrics',{}),config.get('_on_progress'))
     key = clean_key(config.get("api_key", "")) or clean_key(os.environ.get("GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY",''))
     metrics=config.get('_metrics',{})
     on_progress=config.get('_on_progress')
@@ -471,7 +510,8 @@ def ask(png, config):
                 Path(config['_trace_path']).write_text(json.dumps(json.loads(raw),ensure_ascii=False,indent=2),encoding='utf-8')
             except (ValueError,OSError,IndexError):pass
         validation_started=time.monotonic()
-        answer=(extract_interactions_answer(data) if config['gemini_api']=='interactions' else extract_gemini_answer(data)) if provider == "gemini" else extract_answer(data)
+        parser=(extract_interactions_answer if config['gemini_api']=='interactions' else extract_gemini_answer) if provider=='gemini' else extract_answer
+        answer=parser(data,compact=config.get('output_mode')=='compact')
         metrics['validation_seconds']=round(time.monotonic()-validation_started,3)
         return answer
     except urllib.error.HTTPError as exc:
@@ -529,7 +569,7 @@ class Hotkeys(threading.Thread):
                 registered.append(4)
             self.cancel_available=bool(user.RegisterHotKey(None,5,HOTKEY_MODIFIERS,ord('X')))
             if self.cancel_available:registered.append(5)
-            self.events.put(("ready", "v8.3 Ready: Ctrl+Alt+S" + ("" if self.replay_available else " (F8 busy)")))
+            self.events.put(("ready", "v8.4 Ready: Ctrl+Alt+S" + ("" if self.replay_available else " (F8 busy)")))
             msg = wintypes.MSG()
             while user.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 if msg.message == 0x0312:
@@ -546,7 +586,7 @@ class Hotkeys(threading.Thread):
 def main():
     if sys.platform != "win32":
         raise RuntimeError("Windows is required.")
-    config = normalize_config(load_config(CONFIG))
+    config = load_active_config()
     user = ctypes.windll.user32
     kernel = ctypes.windll.kernel32
     kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
@@ -558,13 +598,21 @@ def main():
     if kernel.GetLastError() == 183:
         kernel.CloseHandle(mutex)
         user.MessageBoxW(None, "Screen Helper уже запущен. Завершите его через Ctrl+Alt+Q,\n"
-                         "затем запустите нужную версию ещё раз.", "Screen Helper v8.3", 0x40)
+                         "затем запустите нужную версию ещё раз.", "Screen Helper v8.4", 0x40)
         return
     overlay = None
+    detail = None
     keys = None
     try:
         user.SetProcessDPIAware()
         overlay = Overlay(config)
+        detail = ResultWindow()
+        def show_answer(text):
+            overlay.hide();detail.hide()
+            if len(text)>3 or '\n' in text:
+                area=overlay.work_area()
+                detail.show(text,(area.left,area.top,area.right,area.bottom),15)
+            else:overlay.show(text)
         events = queue.Queue()
         keys = Hotkeys(events)
         busy = False
@@ -626,6 +674,7 @@ def main():
                 user.TranslateMessage(ctypes.byref(msg))
                 user.DispatchMessageW(ctypes.byref(msg))
             overlay.expire()
+            detail.expire()
             now=time.monotonic()
             if now-last_status_tick>=.5:
                 if busy and progress:
@@ -661,9 +710,9 @@ def main():
                     save_status(status_path,dict(status_view,process_running=True,pid=os.getpid(),updated_at=time.time()))
                 if token == generation:
                     last_answer = result_text(answer)
-                    if last_answer:overlay.show(last_answer)
-                    else:overlay.hide()
-                else:overlay.hide()
+                    if last_answer:show_answer(last_answer)
+                    else:overlay.hide();detail.hide()
+                else:overlay.hide();detail.hide()
             elif kind == "key":
                 if value == 3:
                     break
@@ -673,16 +722,18 @@ def main():
                 if value == 2:
                     generation += 1
                     status_visible=False
-                    overlay.hide()
+                    overlay.hide();detail.hide()
                 elif value == 4:
                     if busy:
                         status_visible=True
                         overlay.show(progress.text() if progress else '0',persistent=True)
                     elif last_answer:
-                        overlay.show(last_answer)
+                        show_answer(last_answer)
                 elif value == 1 and not busy:
+                    overlay.hide();detail.hide()
                     try:
-                        current_config = normalize_config(load_config(CONFIG))
+                        current_config = load_active_config()
+                        current_config['output_mode']='full'
                         bounds, work_area = capture_target(current_config['capture_mode'])
                     except CaptureError as error:
                         save_status(CONFIG.with_name('last-result.json'),result_report(str(error),{},0))
@@ -716,6 +767,7 @@ def main():
             keys.join(timeout=1)
         if overlay:
             overlay.close()
+        if detail:detail.close()
         kernel.CloseHandle(mutex)
 
 
@@ -775,18 +827,24 @@ def self_check():
         overlay.hide()
     finally:
         overlay.close()
+    detail=ResultWindow()
+    try:
+        detail.show('Полный ответ\n'+('Элемент → категория\n'*100),(0,0,1280,720),15)
+        assert detail.user.SendMessageW(detail.edit,0xE,0,0)>1000
+        assert detail.expire(detail.deadline)
+    finally:detail.close()
     (BASE / "self-check.json").write_text(json.dumps({"ok": True, "api_called": False,
         "desktop_captured": False, "transparent_black_text": True, "position": "bottom-right",
         "replay_hotkey": "Ctrl+Alt+F8" if keys.replay_available else "unavailable",
-        "version": "8.3", "letter_example":letter,"number_example":number,
+        "version": "8.4", "letter_example":letter,"number_example":number,
         "answer_lifetime_seconds":15,"minimal_timer":True,"dpapi_checked":True,"auth_key_input_supported":True,"interactions_parser_checked":True,
-        "managed_worker_checked":True,"cancel_hotkey":keys.cancel_available}), encoding="utf-8")
+        "managed_worker_checked":True,"full_result_window_checked":True,"cancel_hotkey":keys.cancel_available}), encoding="utf-8")
 
 
 def api_check():
     """One real request using a synthetic question; never captures the desktop."""
     from PIL import Image, ImageDraw
-    config = normalize_config(load_config(CONFIG))
+    config = load_active_config()
     picture = Image.new("RGB", (500, 240), "white")
     ImageDraw.Draw(picture).text((20, 20), "What is 2 + 2?\n\nA) 3\nB) 4\nC) 5\nD) 6", fill="black", font_size=24)
     buf = io.BytesIO()
@@ -794,8 +852,8 @@ def api_check():
     start = time.monotonic()
     config=dict(config,cache_results=False,request_timeout=config['request_timeout'] or 60)
     answer,metrics=InferenceRouter().run(buf.getvalue(),config)
-    report = {"version": "8.3", "provider": config["provider"], "model": config["model"], "answer": answer,
-              "ok": answer.strip().strip(".").upper() == "B", "desktop_captured": False,
+    report = {"version": "8.4", "provider": config["provider"], "model": config["model"], "answer": answer,
+              "ok": is_control_answer(answer), "desktop_captured": False,
               "seconds": round(time.monotonic()-start, 2)}
     report['metrics']=metrics
     (BASE / "api-check.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -803,13 +861,13 @@ def api_check():
 
 def multi_check():
     from quiz_samples import cases
-    config = normalize_config(load_config(CONFIG))
+    config = load_active_config()
     results = []
     router=InferenceRouter()
     path = BASE / "multi-check.json"
     for name, image, expected in cases(BASE):
         start = time.monotonic()
-        answer,_=router.run(image,dict(config,cache_results=False,request_timeout=config['request_timeout'] or 60))
+        answer,_=router.run(image,dict(config,cache_results=False,request_timeout=config['request_timeout'] or 60,output_mode='compact'))
         results.append({"case": name, "answer": answer, "expected": expected,
                         "ok": answer == expected, "seconds": round(time.monotonic()-start, 2)})
         path.write_text(json.dumps({"version": 7, "all_ok": len(results) == 3 and all(r["ok"] for r in results),
@@ -820,7 +878,9 @@ def multi_check():
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     try:
-        if '--configure-gemini' in sys.argv:
+        if '--configure-cloud' in sys.argv:
+            activate_cloud()
+        elif '--configure-gemini' in sys.argv:
             configure_provider('gemini')
         elif '--configure-openai' in sys.argv:
             configure_openai()

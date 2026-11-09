@@ -19,7 +19,7 @@ def key_problem(key):
 
 def select_provider(key,config):
     mode=config.get('provider_mode','auto')
-    if mode not in ('auto','gemini','openai'):raise ValueError('Unsupported provider mode')
+    if mode not in ('auto','gemini','openai','cloud'):raise ValueError('Unsupported provider mode')
     provider=mode if mode!='auto' else detect_provider(key) or config.get('provider') or ('gemini' if str(config.get('model','')).removeprefix('models/').startswith('gemini-') else 'openai')
-    if provider not in ('gemini','openai'):raise ValueError('Unsupported API provider')
+    if provider not in ('gemini','openai','cloud'):raise ValueError('Unsupported API provider')
     return provider

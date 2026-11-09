@@ -8,3 +8,5 @@ Proctor Lab intentionally flags ScreenHelper and screen capture processes. No pr
 Run the relevant offline tests; do not send desktop screenshots or make paid calls without the user's authorization.
 The release folder is generated and ignored; publish its binaries as release assets, not source commits.
 Build-Release.ps1 rebuilds from source. Never copy private installed configurations into portable archives.
+Screen Helper 8.4 also supports a shared cloud gateway. Its provider key is intentionally absent and SERVICE_ENABLED=false until the owner sets a key through approved Sites runtime secret tools. Never embed provider keys or platform service-access tokens into the desktop ZIP.
+cloud-gateway/ is a sanitized source mirror. Read docs/CLOUD_OWNER_RU.md, open the owning Sites checkout through its source workflow before deployment, and keep its existing Site ID/audience. Run scripts/sync_cloud_contract.py --check to prevent schema drift. Do not reset quota counters or raise shared limits without owner authorization.

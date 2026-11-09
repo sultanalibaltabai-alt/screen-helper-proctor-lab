@@ -14,6 +14,7 @@ import webbrowser
 from inference import execute,offline_probe,RequestCancelled
 from progress import save_status,STAGES
 from routing import InferenceRouter
+from answers import is_control_answer
 from config_store import load_config, ConfigError
 
 def load_json(path):
@@ -23,6 +24,13 @@ def load_json(path):
     except (OSError,ValueError):return {}
 
 def public_error(answer):
+    if 'cloud_not_configured' in answer:return 'Облачный сервис доступен, но владелец ещё не подключил модель и оплату. Пока можно выбрать Gemini или OpenAI со своим ключом.'
+    if 'API: cloud' in answer:
+        if any(v in answer for v in ('quota_reached','registration_limit','provider_quota')):return 'Общий лимит запросов или квота провайдера исчерпаны. Это общий баланс сервиса.'
+        if 'duplicate_request' in answer:return 'Такой запрос уже был принят. Повторный платный вызов не выполнялся.'
+        if 'image_too_large' in answer:return 'Изображение слишком большое для общего сервиса. Выбери отдельное окно.'
+        if 'provider_access' in answer:return 'Владелец должен проверить ключ и доступ к модели на сервере.'
+        return 'Общий сервис не вернул ответ. Проверь интернет и состояние сервиса; автоматических платных повторов нет.'
     if answer.startswith('Config:'):return 'Проверь настройки программы через Setup.cmd. Возможно, ключ нужно ввести заново на этом ПК.'
     if 'HTTP 30' in answer:return 'API вернул перенаправление. Запрос остановлен: ключ и изображение не пересылаются на другой адрес.'
     if 'billing/quota' in answer:return 'У OpenAI закончился доступный баланс API или не активирована оплата. Открой Billing в OpenAI Platform. Подписка ChatGPT не заменяет настройку этого ключа.'
@@ -43,8 +51,8 @@ def public_error(answer):
 def run(base):
     import tkinter as tk
     from tkinter import ttk
-    from helper import normalize_config
-    root=tk.Tk();root.title('Screen Helper 8.3 — управление');root.geometry(f"740x{min(700,root.winfo_screenheight()-100)}");root.minsize(660,560)
+    from helper import normalize_config,load_active_config
+    root=tk.Tk();root.title('Screen Helper 8.4 — управление');root.geometry(f"740x{min(700,root.winfo_screenheight()-100)}");root.minsize(660,560)
     root.configure(bg='#eef2f7')
     style=ttk.Style(root);style.theme_use('clam')
     style.configure('TFrame',background='#eef2f7');style.configure('TLabel',background='#eef2f7',foreground='#233047',font=('Segoe UI',10))
@@ -70,7 +78,7 @@ def run(base):
     def config():
         nonlocal config_error
         try:
-            value=normalize_config(load_config(base/'config.local.json'))
+            value=load_active_config(base/'config.local.json')
             config_error=''
             return value
         except (ConfigError,OSError) as error:
@@ -117,7 +125,7 @@ def run(base):
             output=io.BytesIO();picture.save(output,'PNG');started=time.monotonic()
             try:
                 result,metrics=router.run(output.getvalue(),current,cancel=test_cancel,on_progress=lambda phase:messages.put(('phase',phase)))
-                report={'version':'8.3','answer':result,'ok':result=='B','seconds':round(time.monotonic()-started,2),'desktop_captured':False,'metrics':metrics}
+                report={'version':'8.4','answer':result,'ok':is_control_answer(result),'seconds':round(time.monotonic()-started,2),'desktop_captured':False,'metrics':metrics}
                 save_status(base/'api-check.json',report);messages.put(('result',report))
             except RequestCancelled:messages.put(('cancelled',None))
             except Exception:messages.put(('error','Проверка завершилась внутренней ошибкой. Открой отчёты для диагностики.'))
@@ -145,12 +153,16 @@ def run(base):
     local_button=ttk.Button(second,text='Проверить программу без API',command=test_local);local_button.pack(side='left',padx=(0,8))
     links=ttk.Frame(frame);links.pack(fill='x',before=answer,pady=(8,0))
     ttk.Button(links,text='Отчёты',command=lambda:os.startfile(str(base))).pack(side='left',padx=(0,8))
-    ttk.Button(links,text='Лимиты API',command=lambda:webbrowser.open('https://ai.google.dev/gemini-api/docs/rate-limits' if config()['provider']=='gemini' else 'https://platform.openai.com/settings/organization/limits')).pack(side='left',padx=(0,8))
+    def limits():
+        current=config()
+        return current['cloud_url']+'/health' if current['provider']=='cloud' else 'https://ai.google.dev/gemini-api/docs/rate-limits' if current['provider']=='gemini' else 'https://platform.openai.com/settings/organization/limits'
+    ttk.Button(links,text='Лимиты API',command=lambda:webbrowser.open(limits())).pack(side='left',padx=(0,8))
     ttk.Button(actions,text='Остановить помощник',command=stop).pack(side='left',padx=(8,0))
     def tick():
         nonlocal test_busy,last_output,testing,test_phase
         current=config();value,live=status()
-        model_label.set(f"Модель: {current['model']}  ·  Лимит ожидания: {current['request_timeout'] or 'безлимит'} с"+(f"\nРезерв: {current['fallback_model']}" if current['fallback_model'] else ''))
+        model_name='на общем сервере' if current['provider']=='cloud' else current['model']
+        model_label.set(f"Модель: {model_name}  ·  Лимит ожидания: {current['request_timeout']} с"+(f"\nРезерв: {current['fallback_model']}" if current['fallback_model'] else ''))
         if testing and not test_busy and live and value.get('state')=='working':testing=False
         if test_busy:details.set(f"{STAGES.get(test_phase,test_phase)} · {int(time.monotonic()-test_started)} с")
         if not test_busy and not testing:

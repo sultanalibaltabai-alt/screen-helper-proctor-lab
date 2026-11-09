@@ -13,7 +13,7 @@ class InferenceRouter:
         models=[config['model']]
         reserve=str(config.get('fallback_model','')).strip()
         if config['provider']=='gemini' and reserve and reserve not in models:models.append(reserve)
-        cache_key=(hashlib.sha256(image).digest(),tuple(models),config.get('reasoning_mode'),config.get('gemini_api'))
+        cache_key=(hashlib.sha256(image).digest(),tuple(models),config.get('reasoning_mode'),config.get('gemini_api'),config.get('output_mode','full'))
         cached=self.cache.get(cache_key)
         if config.get('cache_results',True) and cached and self.clock()-cached[0]<60:
             if on_progress:on_progress('cached')

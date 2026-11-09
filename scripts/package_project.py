@@ -21,7 +21,7 @@ def source_files():
 
 def package():
     OUT.mkdir(exist_ok=True)
-    helper=ROOT/'screen-helper-portable-v8.3.zip'
+    helper=ROOT/'screen-helper-portable-v8.4.zip'
     native=ROOT/'proctor-lab-windows-v3.zip'
     for source,name in [(helper,'ScreenHelper-Windows-x64.zip'),(native,'ProctorLab-Windows-x64.zip')]:
         if not source.is_file():raise RuntimeError('Build missing: '+source.name)
@@ -35,7 +35,7 @@ def package():
                     archive.writestr(name,incoming.read(name))
         for path in [ROOT/'Start.cmd',ROOT/'README_RU.md',ROOT/'README.md',*sorted((ROOT/'docs').glob('*.md'))]:
             archive.write(path,path.relative_to(ROOT).as_posix())
-    with zipfile.ZipFile(OUT/'Project-Source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(OUT/'Project-Source.zip','w',zipfile.ZIP_DEFLATED,strict_timestamps=False) as archive:
         for path in source_files():archive.write(path,'screen-helper-proctor-lab/'+path.relative_to(ROOT).as_posix())
     hashes=[]
     for path in sorted(OUT.glob('*.zip')):
