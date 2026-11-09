@@ -23,7 +23,8 @@ class InteractionTests(unittest.TestCase):
   data=helper.interactions_payload(b'fake-image','gemini-3.8-flash')
   self.assertFalse(data['store']);self.assertEqual(data['input'][1]['mime_type'],'image/png')
   self.assertEqual(data['response_format']['mime_type'],'application/json')
-  self.assertIs(data['response_format']['schema'],helper.ANSWER_SCHEMA)
+  self.assertNotIn('schema',data['response_format'])
+  self.assertIn('"solution"',data['system_instruction'])
   self.assertEqual(data['generation_config']['thinking_level'],'medium')
   self.assertNotIn('max_output_tokens',data.get('generation_config',{}))
  def test_only_completed_model_text_is_used_not_input_or_thought_steps(self):

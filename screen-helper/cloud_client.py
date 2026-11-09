@@ -19,7 +19,7 @@ class CloudError(Exception):
 
 def _post(origin,path,body,timeout,headers=None,on_progress=None):
     request=urllib.request.Request(origin+path,data=json.dumps(body).encode('utf-8'),
-        headers={'Content-Type':'application/json','Accept':'application/json','User-Agent':'ScreenHelper/8.4',**(headers or {})},method='POST')
+        headers={'Content-Type':'application/json','Accept':'application/json','User-Agent':'ScreenHelper/8.5',**(headers or {})},method='POST')
     try:return request_json(request,timeout=timeout,retries=0,on_progress=on_progress)
     except urllib.error.HTTPError as error:
         allowed={'cloud_not_configured','authentication_required','access_revoked','registration_limit','quota_reached',

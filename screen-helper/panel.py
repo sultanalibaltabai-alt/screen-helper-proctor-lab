@@ -52,7 +52,7 @@ def run(base):
     import tkinter as tk
     from tkinter import ttk
     from helper import normalize_config,load_active_config
-    root=tk.Tk();root.title('Screen Helper 8.4 — управление');root.geometry(f"740x{min(700,root.winfo_screenheight()-100)}");root.minsize(660,560)
+    root=tk.Tk();root.title('Screen Helper 8.5 — управление');root.geometry(f"740x{min(700,root.winfo_screenheight()-100)}");root.minsize(660,560)
     root.configure(bg='#eef2f7')
     style=ttk.Style(root);style.theme_use('clam')
     style.configure('TFrame',background='#eef2f7');style.configure('TLabel',background='#eef2f7',foreground='#233047',font=('Segoe UI',10))
@@ -125,7 +125,7 @@ def run(base):
             output=io.BytesIO();picture.save(output,'PNG');started=time.monotonic()
             try:
                 result,metrics=router.run(output.getvalue(),current,cancel=test_cancel,on_progress=lambda phase:messages.put(('phase',phase)))
-                report={'version':'8.4','answer':result,'ok':is_control_answer(result),'seconds':round(time.monotonic()-started,2),'desktop_captured':False,'metrics':metrics}
+                report={'version':'8.5','answer':result,'ok':is_control_answer(result),'seconds':round(time.monotonic()-started,2),'desktop_captured':False,'metrics':metrics}
                 save_status(base/'api-check.json',report);messages.put(('result',report))
             except RequestCancelled:messages.put(('cancelled',None))
             except Exception:messages.put(('error','Проверка завершилась внутренней ошибкой. Открой отчёты для диагностики.'))

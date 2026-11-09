@@ -10,8 +10,9 @@ import math
 from pathlib import Path
 import sys
 import time
+import textwrap
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 
 class SIZE(ctypes.Structure):
@@ -36,24 +37,43 @@ class BITMAPINFO(ctypes.Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 1)]
 
 
-def render_text(text, font_size=11):
-    """Return black glyphs on genuine zero-alpha pixels, without a rectangle."""
+def load_font(font_size):
     font_size = max(8, min(40, int(font_size)))
     font_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "segoeui.ttf"
     try:
-        font = ImageFont.truetype(str(font_path), font_size)
+        return ImageFont.truetype(str(font_path), font_size)
     except OSError:
-        font = ImageFont.load_default(size=font_size)
-    text = str(text).replace("\r", "")[:500] or "?"
+        return ImageFont.load_default(size=font_size)
+
+
+def paginate_text(text,font_size,max_width,max_lines):
+    text=str(text).replace('\r','').expandtabs(4)[:24000] or '?'
+    font=load_font(font_size)
+    cell=max(1,max(font.getlength(c) for c in set(text) if c!='\n')) if text.strip() else font_size
+    columns=max(4,int((max_width-4)/cell));rows=[]
+    for line in text.split('\n'):
+        rows.extend(textwrap.wrap(line,width=columns,replace_whitespace=False,drop_whitespace=False,break_long_words=True,break_on_hyphens=False) or [''])
+    return ['\n'.join(rows[i:i+max_lines]) for i in range(0,len(rows),max_lines)]
+
+
+def premultiplied_bgra(picture):
+    r,g,b,a=picture.split()
+    return Image.merge('RGBA',(ImageChops.multiply(b,a),ImageChops.multiply(g,a),ImageChops.multiply(r,a),a)).tobytes()
+
+
+def render_text(text, font_size=11,color=(0,0,0),align='right'):
+    """Render ordinary visible glyphs on transparent pixels; never hide from capture."""
+    font=load_font(font_size)
+    text = str(text).replace("\r", "")[:24000] or "?"
     scratch = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-    bounds = scratch.multiline_textbbox((0, 0), text, font=font, spacing=2, align="right")
+    bounds = scratch.multiline_textbbox((0, 0), text, font=font, spacing=2, align=align)
     pad = 2
     width = max(1, math.ceil(bounds[2] - bounds[0])) + pad * 2
     height = max(1, math.ceil(bounds[3] - bounds[1])) + pad * 2
     picture = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     ImageDraw.Draw(picture).multiline_text(
-        (pad-bounds[0], pad-bounds[1]), text, font=font, fill=(0, 0, 0, 255),
-        spacing=2, align="right")
+        (pad-bounds[0], pad-bounds[1]), text, font=font, fill=(*color,255),
+        spacing=2, align=align)
     return picture
 
 
@@ -73,6 +93,8 @@ class Overlay:
         self.deadline = None
         self.last_rect = None
         self.last_size = None
+        self.answer_pages=[]
+        self.page_index=0
 
     def _bind(self):
         u, g = self.user, self.gdi
@@ -118,16 +140,18 @@ class Overlay:
     def show(self, text, *, persistent=False,font_size=None):
         if not self.hwnd:
             raise RuntimeError("The overlay is closed.")
-        picture = render_text(text, self.config.get("font_size", 11) if font_size is None else font_size)
+        left=self.config.get('overlay_anchor')=='bottom-left'
+        color=(255,255,255) if self.config.get('text_color')=='white' else (0,0,0)
+        picture = render_text(text, self.config.get("font_size", 11) if font_size is None else font_size,color,'left' if left else 'right')
         area = self.work_area()
         margin = max(0, int(self.config.get("overlay_margin", 12)))
         # Avoid placing oversized messages outside the primary monitor's work area.
         max_width = max(1, area.right-area.left-margin*2)
         max_height = max(1, area.bottom-area.top-margin*2)
         if picture.width > max_width or picture.height > max_height:
-            picture = picture.crop((max(0, picture.width-max_width), 0,
-                                    picture.width, min(picture.height, max_height)))
-        x = max(area.left, area.right-margin-picture.width)
+            start=0 if left else max(0,picture.width-max_width)
+            picture = picture.crop((start,0,min(picture.width,start+max_width),min(picture.height,max_height)))
+        x = area.left+margin if left else max(area.left, area.right-margin-picture.width)
         y = max(area.top, area.bottom-margin-picture.height)
         self._upload(picture, x, y)
         if not self.user.SetWindowPos(self.hwnd, wintypes.HWND(-1), 0, 0, 0, 0, 0x0053):
@@ -135,6 +159,25 @@ class Overlay:
         self.last_size = picture.size
         self.last_rect = (x, y, x+picture.width, y+picture.height)
         self.deadline = None if persistent else time.monotonic() + float(self.config.get("display_seconds", 15))
+
+    def show_answer(self,text):
+        area=self.work_area();size=self.config.get('font_size',11)
+        width=max(60,min(760,int((area.right-area.left)*.7))-24)
+        height=max(50,min(350,int((area.bottom-area.top)*.4)))
+        font=load_font(size);bounds=font.getbbox('AgЖ')
+        lines=max(2,int(height/max(1,bounds[3]-bounds[1]+2))-2)
+        self.answer_pages=paginate_text(text,size,width,lines);self.page_index=0
+        self._show_answer_page()
+
+    def _show_answer_page(self):
+        text=self.answer_pages[self.page_index]
+        if len(self.answer_pages)>1:text+=f'\n[{self.page_index+1}/{len(self.answer_pages)}]'
+        self.show(text)
+
+    def replay_answer(self):
+        if self.answer_pages:
+            self.page_index=(self.page_index+1)%len(self.answer_pages)
+            self._show_answer_page()
 
     def _upload(self, picture, x, y):
         desktop_dc = self.user.GetDC(None)
@@ -154,8 +197,7 @@ class Overlay:
                                               ctypes.byref(bits), None, 0)
             if not bitmap or not bits.value:
                 raise ctypes.WinError(ctypes.get_last_error())
-            # RGB is always zero, so BGRA is already correctly premultiplied.
-            pixels = picture.tobytes("raw", "BGRA")
+            pixels = premultiplied_bgra(picture)
             ctypes.memmove(bits, pixels, len(pixels))
             original = self.gdi.SelectObject(memory_dc, bitmap)
             source = wintypes.POINT(0, 0)

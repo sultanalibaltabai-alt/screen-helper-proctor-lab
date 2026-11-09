@@ -4,7 +4,7 @@
 
 ---
 
-Помоги завершить настройку общего ИИ в моём Screen Helper 8.4. Я плохо разбираюсь
+Помоги завершить настройку общего ИИ в моём Screen Helper 8.5. Я плохо разбираюсь
 в API: объясняй просто, всю доступную техническую работу делай сам. Проект уже
 реализован — не переписывай его. Я хочу скачать ScreenHelper-Windows-x64.zip на
 другой Windows x64 ПК, распаковать и запустить Start.cmd без установки Python и
@@ -13,9 +13,10 @@
 Приватный репозиторий: https://github.com/sultanalibaltabai-alt/screen-helper-proctor-lab
 Сервис: https://study-tools-cloud-sultan-1109.satinwaterlily4.chatgpt.site
 project_id: appgprj_6af1e54badf481918709b9c018de5ef2
-Сейчас он намеренно выключен: ключ провайдера отсутствует, SERVICE_ENABLED=false.
-База и API опубликованы; HTTPS-связь из клиента проверена. Не называй модель
-работающей до настоящего завершённого ответа. Я сам выполню оплату и создание ключа.
+Gemini подключён: AI_PROVIDER=gemini, AI_MODEL=gemini-3.5-flash-lite,
+SERVICE_ENABLED=true. Ключ хранится в runtime secrets Sites и в GitHub отсутствует.
+Живой запрос через portable EXE вернул B) 4 за 4,28 секунды, HTTP 200.
+OpenAI ещё не подключён; оплату и создание нового ключа я выполню сам.
 Начальный бюджет — $5 API-баланса, не безлимит и не подписка ChatGPT.
 
 Сначала прочитай AGENTS.md, README_RU.md, docs/CLOUD_OWNER_RU.md,
@@ -30,7 +31,7 @@ Gemini/OpenAI: если я выбираю свой Gemini, не требуй п�
 
 Затем через штатные инструменты Sites добавь OPENAI_API_KEY как secret,
 AI_PROVIDER=openai, AI_MODEL=gpt-5.4-mini, SERVICE_ENABLED=true. Для общего Gemini
-используются GEMINI_API_KEY, AI_PROVIDER=gemini, AI_MODEL=gemini-3.8-flash. Не
+используются GEMINI_API_KEY, AI_PROVIDER=gemini, AI_MODEL=gemini-3.5-flash-lite. Не
 меняй и не публикуй IP_HASH_SECRET. Сохрани существующий Site и публичную аудиторию:
 клиент должен регистрироваться без браузерного входа. Не выдавай платформенный
 SIWC bypass token конечным пользователям и не встраивай provider key в ZIP.
@@ -49,7 +50,7 @@ source workflow и опубликуй точный проверенный ист
 модель, время и расходуемую квоту, затем проверь пару эталонных примеров форматов.
 При 401/403/404/429/503/тайм-ауте выясняй конкретный сбой; не выдумывай ответы.
 
-Клиент: screen-helper/helper.py, answers.py, cloud_client.py, result_window.py,
+Клиент: screen-helper/helper.py, answers.py, cloud_client.py, overlay.py,
 config_store.py и routing.py. Сервер: cloud-gateway/ (очищенное зеркало).
 Build-Release.ps1 собирает Windows portable. scripts/sync_cloud_contract.py --check
 проверяет единую схему. При смене схемы обнови и серверный checkout, и клиент,
@@ -58,7 +59,10 @@ Build-Release.ps1 собирает Windows portable. scripts/sync_cloud_contract
 Сохрани полные ответы, MSQ, сопоставления, порядок, drag/drop как пары и код;
 поддержка формата не гарантирует решения каждого задания. Не выдумывай скрытые
 элементы, страницы и графы. Во время ожидания только секунды, ответ 15 секунд,
-подробная диагностика в панели. Не возвращай временный бессрочный показ.
+подробная диагностика в панели. Ответ — белый текст без рамки снизу слева;
+Ctrl+Alt+F8 переключает страницы. На белом фоне он плохо виден всем, это не
+защита от записи. Не возвращай временный бессрочный показ. Не делай fine-tuning:
+предметы разные. Пара 2+2 — проверка соединения, не обучение модели.
 Процессы видны системе, гарантии работы/обхода OES нет. Строгий Proctor Lab
 может намеренно блокировать ScreenHelper — это отдельная функция стенда.
 

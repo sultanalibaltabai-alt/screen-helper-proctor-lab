@@ -13,10 +13,10 @@ class CredentialTests(unittest.TestCase):
  def test_google_auth_keys_fix_the_old_openai_model_selection(self):
   for key in ('AIzaFAKE','AQ.FAKE-AUTH-KEY'):
    config=helper.normalize_config({'api_key':key,'provider':'openai','model':'gpt-4.1-mini'})
-   self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],'gemini-3.8-flash')
+   self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],helper.DEFAULT_MODELS['gemini'])
  def test_unknown_key_formats_can_use_an_explicit_provider(self):
   config=helper.normalize_config({'api_key':'FUTURE_FAKE_FORMAT','provider_mode':'gemini','model':'gpt-4.1-mini'})
-  self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],'gemini-3.8-flash')
+  self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],helper.DEFAULT_MODELS['gemini'])
   self.assertIsNone(key_problem(config['api_key']))
  def test_new_auth_key_is_sent_only_in_the_google_header(self):
   with patch.dict(os.environ,{},clear=True),patch('api_transport.open_request',return_value=io.BytesIO(b'{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"B"}]}]}')) as send:
@@ -51,7 +51,7 @@ class CredentialTests(unittest.TestCase):
     with patch.object(helper,'CONFIG',path),patch.object(tk,'Tk',return_value=root),patch.object(root,'mainloop',side_effect=fill_and_save),patch('tkinter.messagebox.showinfo'),patch('tkinter.messagebox.showerror') as error:
      helper.configure_gui({'provider':'openai','model':'gpt-4.1-mini'})
     error.assert_not_called();config=helper.load_config(path)
-    self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],'gemini-3.8-flash');self.assertEqual(config['api_key'],'AQ.FAKE-GUI-KEY')
+    self.assertEqual(config['provider'],'gemini');self.assertEqual(config['model'],helper.DEFAULT_MODELS['gemini']);self.assertEqual(config['api_key'],'AQ.FAKE-GUI-KEY')
    finally:
     try:root.destroy()
     except tk.TclError:pass

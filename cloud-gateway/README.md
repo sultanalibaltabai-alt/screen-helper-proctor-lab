@@ -1,8 +1,9 @@
 # Study Tools Cloud
 
 Server-only Gemini/OpenAI gateway for the portable Windows study helper.
-No provider key is present in this checkout. SERVICE_ENABLED is false until the
-owner explicitly configures a funded key through Sites runtime secrets.
+No provider key is present in this checkout. The owned production Site now uses
+Gemini via runtime secrets. A synthetic end-to-end request succeeded; OpenAI is
+not configured. A fresh unrelated deployment still requires its own secret setup.
 
 API: GET /health, POST /v1/register, POST /v1/infer.
 Device credentials are random and stored hashed in D1. Quota reservations are

@@ -65,7 +65,7 @@ async function infer(request,env,config,upstream,now){
  const body=await readJson(request),image=validateImage(body.image),day=new Date(now).toISOString().slice(0,10),minute=new Date(now).toISOString().slice(0,16);
  const allowed=await claim(env.DB,id,client.id,[['all','lifetime-'+config.namespace,config.total],['all',day,config.daily],['client:'+client.id,day,config.clientDaily],['minute:'+client.id,minute,2]],now);
  if(allowed!=='allowed')return json({error:allowed},allowed==='duplicate_request'?409:429);
- let endpoint,payload,headers={'Content-Type':'application/json'};
+ let endpoint,payload,headers={'Content-Type':'application/json','User-Agent':'ScreenHelperCloud/8.5'};
  if(config.provider==='openai'){
   endpoint='https://api.openai.com/v1/responses';headers.Authorization='Bearer '+config.key;
   payload={model:config.model,store:false,max_output_tokens:8000,reasoning:{effort:'low'},instructions:PROMPT,
@@ -73,12 +73,16 @@ async function infer(request,env,config,upstream,now){
    input:[{role:'user',content:[{type:'input_text',text:'Solve the complete visible questions.'},{type:'input_image',detail:'high',image_url:'data:image/png;base64,'+image}]}]};
  }else{
   endpoint='https://generativelanguage.googleapis.com/v1beta/interactions';headers['x-goog-api-key']=config.key;headers['Api-Revision']='2026-05-20';
-  payload={model:config.model,store:false,system_instruction:PROMPT,input:[{type:'text',text:'Solve the complete visible questions.'},{type:'image',mime_type:'image/png',data:image}],
-   generation_config:{thinking_level:'low',max_output_tokens:8000},response_format:{type:'text',mime_type:'application/json',schema:ANSWER_SCHEMA}};
+  payload={model:config.model,store:false,system_instruction:PROMPT+'\nResponse JSON contract (content guidance):\n'+JSON.stringify(ANSWER_SCHEMA),input:[{type:'text',text:'Solve the complete visible questions.'},{type:'image',mime_type:'image/png',data:image}],
+   generation_config:{thinking_level:'low',max_output_tokens:8000},response_format:{type:'text',mime_type:'application/json'}};
  }
  try{
-  const response=await upstream(endpoint,{method:'POST',headers,body:JSON.stringify(payload),signal:AbortSignal.timeout(55000),redirect:'error'});
+  // Workers supports manual/follow, not Fetch's error redirect mode. Never follow redirects with a provider key.
+  const response=await upstream(endpoint,{method:'POST',headers,body:JSON.stringify(payload),signal:AbortSignal.timeout(55000),redirect:'manual'});
   if(!response.ok){
+   let category='other';try{const problem=await response.json();const message=String(problem?.error?.message||'').toLowerCase();
+    category=message.includes('schema')?'schema':message.includes('thinking')?'thinking':message.includes('location')?'location':message.includes('credential')||message.includes('api key')?'credentials':message.includes('demand')?'overloaded':'other';}catch{}
+   console.error(JSON.stringify({event:'provider_http_failure',status:response.status,category}));
    await env.DB.prepare("UPDATE requests SET status='upstream_error' WHERE id=?").bind(id).run();
    return json({error:response.status===429?'provider_quota':[401,403].includes(response.status)?'provider_access':'provider_unavailable'},response.status===429?429:503);
   }
@@ -88,7 +92,9 @@ async function infer(request,env,config,upstream,now){
   if(!Array.isArray(result.answers)||result.answers.length<1||result.answers.length>8||JSON.stringify(result).length>60000)return json({error:'invalid_response'},502);
   await env.DB.prepare("UPDATE requests SET status='completed' WHERE id=?").bind(id).run();
   return json({result,model:config.model,provider:config.provider});
- }catch{
+ }catch(error){
+  const reason=String(error?.message||'').toLowerCase();
+  console.error(JSON.stringify({event:'provider_transport_failure',type:error?.name||'Error',category:reason.includes('illegal invocation')?'invocation':reason.includes('timeout')?'timeout':reason.includes('abortsignal')?'abort_signal':'other'}));
   await env.DB.prepare("UPDATE requests SET status='connection_failed' WHERE id=?").bind(id).run().catch(()=>{});
   return json({error:'provider_unavailable'},503);
  }
@@ -97,7 +103,7 @@ function home(config){
  const state=config.configured&&config.enabled?'Модель подключена':'Модель пока не подключена';
  return new Response(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Study Tools Cloud</title><style>body{margin:0;background:#f5f7fb;color:#1f3048;font:17px/1.7 system-ui}main{max-width:760px;margin:8vh auto;padding:32px}small{color:#5e7187}h1{font-size:42px;line-height:1.15}.card{background:white;border:1px solid #dce5ee;border-radius:18px;padding:28px;margin:24px 0}.state{color:#236341;font-weight:650}a{color:#285ab7}</style><main><small>SCREEN HELPER · ОБЩИЙ СЕРВИС</small><h1>Ключ остаётся<br>на сервере.</h1><div class="card"><div class="state">${state}</div><p>Приложение Windows подключается автоматически. Вводить ключ провайдера на каждом компьютере не требуется.</p><p>Поддерживаются Gemini и OpenAI. Сейчас выбран ${config.provider==='openai'?'OpenAI':'Gemini'}. Ключ и оплата добавляются владельцем отдельно.</p></div><p>Ограничения общего доступа: ${config.total} запросов всего, ${config.daily} в сутки, ${config.clientDaily} на установку в сутки. Это лимиты запросов, а не денежный баланс.</p><p>Изображения, распознанные вопросы и ответы не сохраняются. Технические записи нужны для авторизации и квот. AI может ошибаться и видит только переданное изображение.</p><p><a href="https://github.com/sultanalibaltabai-alt/screen-helper-proctor-lab/releases/latest">Скачать Windows ZIP</a> · <a href="/health">Состояние API</a></p><small>Общий API не даёт безлимитного доступа за $5. Подписка ChatGPT не является ключом этого сервиса.</small></main></html>`,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}});
 }
-export async function handle(request,env,ctx={},upstream=fetch,now=Date.now()){
+export async function handle(request,env,ctx={},upstream=(url,options)=>globalThis.fetch(url,options),now=Date.now()){
  const config=configuration(env),url=new URL(request.url);
  if(request.method==='GET'&&url.pathname==='/')return home(config);
  if(request.method==='GET'&&url.pathname==='/health')return json({version:'8.4',ready:config.configured&&config.enabled,provider:config.provider,limits:{total:config.total,daily:config.daily,client_daily:config.clientDaily}});

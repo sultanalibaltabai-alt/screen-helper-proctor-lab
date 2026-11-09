@@ -13,7 +13,7 @@ Run-Checked python @('-m','unittest','discover','-s','proctor-lab/native','-q')
 Push-Location -LiteralPath 'screen-helper'
 try {
     Run-Checked python @('-m','PyInstaller','--noconfirm','--windowed','--onedir','--name','ScreenHelper','--exclude-module','numpy','--distpath','dist-v2','--workpath','build-v2','--specpath','build-v2','helper.py')
-    Run-Checked python @('package_release.py','8.4')
+    Run-Checked python @('package_release.py','8.5')
 } finally { Pop-Location }
 Push-Location -LiteralPath 'proctor-lab'
 try {

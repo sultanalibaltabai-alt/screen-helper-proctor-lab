@@ -52,7 +52,7 @@ class HelperTests(unittest.TestCase):
     def test_google_key_migrates_openai_model(self):
         config = helper.normalize_config({"api_key": "AIzaFAKE", "model": "gpt-4.1-mini"})
         self.assertEqual(config["provider"], "gemini")
-        self.assertEqual(config["model"], "gemini-3.8-flash")
+        self.assertEqual(config["model"], helper.DEFAULT_MODELS["gemini"])
 
     def test_google_request_never_uses_openai_host_or_authorization(self):
         body = {"candidates": [{"content": {"parts": [{"text": "B"}]}}]}

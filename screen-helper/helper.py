@@ -4,7 +4,6 @@ import ctypes
 from ctypes import wintypes
 from answers import ANSWER_SCHEMA, PROMPT, format_answers, is_control_answer
 from overlay import Overlay
-from result_window import ResultWindow
 from api_transport import request_json,request_gemini_stream
 from progress import RequestProgress,save_status
 from capture import target as capture_target, capture_image, CaptureError
@@ -34,7 +33,7 @@ BASE = (Path(sys.executable) if getattr(sys, "frozen", False) else Path(__file__
 CONFIG = BASE / "config.local.json"
 HOTKEY_MODIFIERS = 0x4003
 MUTEX_NAME = "Local\\ScreenHelperSingleInstance"
-DEFAULT_MODELS = {"openai": "gpt-5.4-mini", "gemini": "gemini-3.8-flash","cloud":"cloud-managed"}
+DEFAULT_MODELS = {"openai": "gpt-5.4-mini", "gemini": "gemini-3.5-flash-lite","cloud":"cloud-managed"}
 
 
 def load_active_config(path=None):
@@ -101,6 +100,8 @@ def normalize_config(config):
         model = DEFAULT_MODELS[provider]
     result["model"] = model
     result["display_seconds"] = 15
+    result["text_color"]="white"
+    result["overlay_anchor"]="bottom-left"
     result.pop('hold_results',None)
     result.pop('show_progress',None)
     result['streaming'] = result.get('streaming',False) is True
@@ -192,7 +193,7 @@ def configure_gui(old):
     from tkinter import messagebox
     root = tk.Tk()
     old = normalize_config(old)
-    root.title("Screen Helper v8.4 — настройка API")
+    root.title("Screen Helper v8.5 — настройка API")
     root.geometry(f"620x{min(720,max(400,root.winfo_screenheight()-100))}")
     root.minsize(560,360)
     outer=tk.Frame(root);outer.pack(fill='both',expand=True)
@@ -364,12 +365,13 @@ def extract_answer(data,compact=False):
 
 
 def gemini_payload(png, model, reasoning_mode='balanced'):
-    generation = {"responseMimeType": "application/json", "responseJsonSchema": ANSWER_SCHEMA}
+    generation = {"responseMimeType": "application/json"}
     if model.startswith('gemini-3') and 'flash' in model and reasoning_mode!='auto':
         generation['thinkingConfig']={'thinkingLevel':{'fast':'LOW','balanced':'MEDIUM','deep':'HIGH'}[reasoning_mode]}
     elif model.startswith('gemini-2.5-flash') and reasoning_mode in ('fast','balanced'):
         generation['thinkingConfig']={'thinkingBudget':1024 if reasoning_mode=='fast' else 4096}
-    return {"systemInstruction": {"parts": [{"text": PROMPT}]},
+    instruction=PROMPT+'\nResponse JSON contract (content guidance):\n'+json.dumps(ANSWER_SCHEMA,ensure_ascii=False)
+    return {"systemInstruction": {"parts": [{"text": instruction}]},
             "contents": [{"role": "user", "parts": [
                 {"text": "Answer the visible question."},
                 {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(png).decode("ascii")}}]}],
@@ -377,10 +379,11 @@ def gemini_payload(png, model, reasoning_mode='balanced'):
 
 
 def interactions_payload(png,model,reasoning_mode='balanced'):
-    result={'model':model,'store':False,'system_instruction':PROMPT,
+    instruction=PROMPT+'\nResponse JSON contract (content guidance):\n'+json.dumps(ANSWER_SCHEMA,ensure_ascii=False)
+    result={'model':model,'store':False,'system_instruction':instruction,
             'input':[{'type':'text','text':'Answer the visible questions.'},
                      {'type':'image','mime_type':'image/png','data':base64.b64encode(png).decode('ascii')}],
-            'response_format':{'type':'text','mime_type':'application/json','schema':ANSWER_SCHEMA}}
+            'response_format':{'type':'text','mime_type':'application/json'}}
     if reasoning_mode!='auto':result['generation_config']={'thinking_level':{'fast':'low','balanced':'medium','deep':'high'}[reasoning_mode]}
     return result
 
@@ -434,7 +437,7 @@ def network_check():
         url=config['cloud_url'].rstrip('/')+'/health';host=urllib.parse.urlsplit(url).hostname
     report = {"version": 7, "host": host, "key_sent": False, "image_sent": False}
     try:
-        with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'ScreenHelper/8.4'}), timeout=15) as response:
+        with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'ScreenHelper/8.5'}), timeout=15) as response:
             report.update(connection="reachable", http_status=response.status)
             if config['provider']=='cloud':report['cloud_ready']=json.load(response).get('ready') is True
     except urllib.error.HTTPError as error:
@@ -569,7 +572,7 @@ class Hotkeys(threading.Thread):
                 registered.append(4)
             self.cancel_available=bool(user.RegisterHotKey(None,5,HOTKEY_MODIFIERS,ord('X')))
             if self.cancel_available:registered.append(5)
-            self.events.put(("ready", "v8.4 Ready: Ctrl+Alt+S" + ("" if self.replay_available else " (F8 busy)")))
+            self.events.put(("ready", "v8.5 Ready: Ctrl+Alt+S" + ("" if self.replay_available else " (F8 busy)")))
             msg = wintypes.MSG()
             while user.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 if msg.message == 0x0312:
@@ -598,21 +601,16 @@ def main():
     if kernel.GetLastError() == 183:
         kernel.CloseHandle(mutex)
         user.MessageBoxW(None, "Screen Helper уже запущен. Завершите его через Ctrl+Alt+Q,\n"
-                         "затем запустите нужную версию ещё раз.", "Screen Helper v8.4", 0x40)
+                         "затем запустите нужную версию ещё раз.", "Screen Helper v8.5", 0x40)
         return
     overlay = None
-    detail = None
     keys = None
     try:
         user.SetProcessDPIAware()
         overlay = Overlay(config)
-        detail = ResultWindow()
         def show_answer(text):
-            overlay.hide();detail.hide()
-            if len(text)>3 or '\n' in text:
-                area=overlay.work_area()
-                detail.show(text,(area.left,area.top,area.right,area.bottom),15)
-            else:overlay.show(text)
+            overlay.hide()
+            overlay.show_answer(text)
         events = queue.Queue()
         keys = Hotkeys(events)
         busy = False
@@ -674,7 +672,6 @@ def main():
                 user.TranslateMessage(ctypes.byref(msg))
                 user.DispatchMessageW(ctypes.byref(msg))
             overlay.expire()
-            detail.expire()
             now=time.monotonic()
             if now-last_status_tick>=.5:
                 if busy and progress:
@@ -711,8 +708,8 @@ def main():
                 if token == generation:
                     last_answer = result_text(answer)
                     if last_answer:show_answer(last_answer)
-                    else:overlay.hide();detail.hide()
-                else:overlay.hide();detail.hide()
+                    else:overlay.hide()
+                else:overlay.hide()
             elif kind == "key":
                 if value == 3:
                     break
@@ -722,15 +719,15 @@ def main():
                 if value == 2:
                     generation += 1
                     status_visible=False
-                    overlay.hide();detail.hide()
+                    overlay.hide()
                 elif value == 4:
                     if busy:
                         status_visible=True
                         overlay.show(progress.text() if progress else '0',persistent=True)
                     elif last_answer:
-                        show_answer(last_answer)
+                        overlay.replay_answer()
                 elif value == 1 and not busy:
-                    overlay.hide();detail.hide()
+                    overlay.hide()
                     try:
                         current_config = load_active_config()
                         current_config['output_mode']='full'
@@ -767,7 +764,6 @@ def main():
             keys.join(timeout=1)
         if overlay:
             overlay.close()
-        if detail:detail.close()
         kernel.CloseHandle(mutex)
 
 
@@ -810,7 +806,10 @@ def self_check():
         keys.join(timeout=2)
     overlay = Overlay(normalize_config({"font_size": 11}))
     try:
-        overlay.show("B")
+        sample_answer='\n'.join(f'{i}: элемент {i} → место {i}' for i in range(100))
+        overlay.show_answer(sample_answer)
+        assert len(overlay.answer_pages)>1
+        assert '\n'.join(overlay.answer_pages)==sample_answer
         ctypes.windll.user32.GetForegroundWindow.restype = wintypes.HWND
         assert ctypes.windll.user32.GetForegroundWindow() != overlay.hwnd
         rect = wintypes.RECT()
@@ -818,27 +817,22 @@ def self_check():
         ctypes.windll.user32.GetWindowRect(overlay.hwnd, ctypes.byref(rect))
         assert (rect.right - rect.left, rect.bottom - rect.top) == overlay.last_size
         area = overlay.work_area()
-        assert rect.right <= area.right and rect.bottom <= area.bottom
+        assert rect.left==area.left+12 and rect.bottom==area.bottom-12
+        assert rect.right <= area.right
         assert 14.5 <= overlay.deadline-time.monotonic() <= 15
         assert not overlay.expire(overlay.deadline-.01)
         assert overlay.expire(overlay.deadline)
-        overlay.show('B',persistent=True)
-        assert overlay.deadline is None
+        overlay.replay_answer()
+        assert overlay.page_index==1 and overlay.deadline is not None
         overlay.hide()
     finally:
         overlay.close()
-    detail=ResultWindow()
-    try:
-        detail.show('Полный ответ\n'+('Элемент → категория\n'*100),(0,0,1280,720),15)
-        assert detail.user.SendMessageW(detail.edit,0xE,0,0)>1000
-        assert detail.expire(detail.deadline)
-    finally:detail.close()
     (BASE / "self-check.json").write_text(json.dumps({"ok": True, "api_called": False,
-        "desktop_captured": False, "transparent_black_text": True, "position": "bottom-right",
+        "desktop_captured": False, "white_text": True, "position": "bottom-left",
         "replay_hotkey": "Ctrl+Alt+F8" if keys.replay_available else "unavailable",
-        "version": "8.4", "letter_example":letter,"number_example":number,
+        "version": "8.5", "letter_example":letter,"number_example":number,
         "answer_lifetime_seconds":15,"minimal_timer":True,"dpapi_checked":True,"auth_key_input_supported":True,"interactions_parser_checked":True,
-        "managed_worker_checked":True,"full_result_window_checked":True,"cancel_hotkey":keys.cancel_available}), encoding="utf-8")
+        "managed_worker_checked":True,"inline_answer_checked":True,"cancel_hotkey":keys.cancel_available}), encoding="utf-8")
 
 
 def api_check():
@@ -852,7 +846,7 @@ def api_check():
     start = time.monotonic()
     config=dict(config,cache_results=False,request_timeout=config['request_timeout'] or 60)
     answer,metrics=InferenceRouter().run(buf.getvalue(),config)
-    report = {"version": "8.4", "provider": config["provider"], "model": config["model"], "answer": answer,
+    report = {"version": "8.5", "provider": config["provider"], "model": config["model"], "answer": answer,
               "ok": is_control_answer(answer), "desktop_captured": False,
               "seconds": round(time.monotonic()-start, 2)}
     report['metrics']=metrics

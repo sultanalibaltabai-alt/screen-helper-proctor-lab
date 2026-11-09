@@ -28,8 +28,9 @@ test('issued token is hashed in D1 and full answers come from a server-controlle
  const env=environment(),bearer=await token(env);let calls=0;
  const r=await handle(request('/v1/infer',{image:png(),model:'attacker-model'},auth(bearer)),env,{},async(url,options)=>{
   calls++;assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/interactions');
-  assert.equal(options.headers['x-goog-api-key'],'FAKE-SERVER-KEY');assert.equal(options.redirect,'error');
-  assert.equal(JSON.parse(options.body).model,'gemini-3.8-flash');return success();
+  assert.equal(options.headers['x-goog-api-key'],'FAKE-SERVER-KEY');assert.equal(options.redirect,'manual');
+  const body=JSON.parse(options.body);assert.equal(body.model,'gemini-3.8-flash');
+  assert.equal(body.response_format.schema,undefined);assert.ok(body.system_instruction.includes('"solution"'));return success();
  });
  assert.equal(r.status,200);assert.deepEqual((await r.json()).result,result);assert.equal(calls,1);
  const stored=JSON.stringify(env.DB.sql.prepare('SELECT * FROM clients').all());
@@ -63,12 +64,20 @@ test('multi-bucket reservations do not partially consume quota when another buck
  assert.equal(await claim(db,crypto.randomUUID(),'second',[['global','day',10],['client','day',1]],now),'quota_reached');
  assert.equal(db.sql.prepare("SELECT used FROM quotas WHERE bucket='global'").get().used,1);
 });
-test('upstream errors and redirects never echo provider secrets or trigger a retry',async()=>{
+test('upstream errors never echo provider secrets or trigger a retry',async()=>{
  const env=environment(),bearer=await token(env),headers=auth(bearer);let calls=0;
  const upstream=async()=>{calls++;return new Response('SECRET BODY FAKE-SERVER-KEY',{status:503});};
  const r=await handle(request('/v1/infer',{image:png()},headers),env,{},upstream);
  assert.equal(r.status,503);assert.ok(!(await r.text()).includes('SECRET'));
  assert.equal((await handle(request('/v1/infer',{image:png()},headers),env,{},upstream)).status,409);assert.equal(calls,1);
+});
+test('Workers-compatible manual redirects never forward the provider key',async()=>{
+ const env=environment(),bearer=await token(env);let calls=0;
+ const r=await handle(request('/v1/infer',{image:png()},auth(bearer)),env,{},async(url,options)=>{
+  calls++;assert.equal(options.redirect,'manual');
+  return new Response('DO NOT ECHO',{status:307,headers:{Location:'https://untrusted.example/'}});
+ });
+ assert.equal(r.status,503);assert.equal(calls,1);assert.ok(!(await r.text()).includes('DO NOT ECHO'));
 });
 test('OpenAI path keeps its key server-side and uses the shared full-answer schema',async()=>{
  const env=environment({AI_PROVIDER:'openai',OPENAI_API_KEY:'FAKE-OPENAI'}),bearer=await token(env);
@@ -77,4 +86,10 @@ test('OpenAI path keeps its key server-side and uses the shared full-answer sche
   assert.ok(b.text.format.schema.properties.answers.items.required.includes('solution'));
   return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(result)}]}]});
  });assert.equal(r.status,200);assert.ok(!(await r.text()).includes('FAKE-OPENAI'));
+});
+test('production default calls fetch with its global receiver',async()=>{
+ const env=environment(),bearer=await token(env),original=globalThis.fetch;
+ globalThis.fetch=async function(){assert.equal(this,globalThis);return success();};
+ try{assert.equal((await handle(request('/v1/infer',{image:png()},auth(bearer)),env)).status,200);}
+ finally{globalThis.fetch=original;}
 });

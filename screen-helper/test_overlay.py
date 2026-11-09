@@ -4,10 +4,42 @@ from ctypes import wintypes
 import time
 import unittest
 
-from overlay import Overlay, render_text
+from overlay import Overlay, render_text, premultiplied_bgra, paginate_text
 
 
 class OverlayTests(unittest.TestCase):
+    def test_white_glyphs_keep_transparent_background_and_correct_alpha(self):
+        picture=render_text('Сопоставление: A → 1',color=(255,255,255),align='left')
+        pixels=list(picture.getdata())
+        self.assertTrue(any(a==0 for r,g,b,a in pixels))
+        self.assertTrue(any(a>0 and r==g==b==255 for r,g,b,a in pixels))
+        data=premultiplied_bgra(picture)
+        for i,(_,_,_,alpha) in enumerate(pixels):
+            self.assertEqual(tuple(data[i*4:i*4+4]),(alpha,alpha,alpha,alpha))
+
+    def test_white_answer_bottom_left_and_pages_survive_expiry(self):
+        window=Overlay({'capture_work_area':(-1920,0,0,1040),'overlay_anchor':'bottom-left',
+                        'text_color':'white','font_size':11,'display_seconds':15})
+        answer='\n'.join(f'{i}: элемент{i} → место{i}' for i in range(100))
+        try:
+            window.show_answer(answer)
+            self.assertEqual(window.last_rect[0],-1908)
+            self.assertEqual(window.last_rect[3],1028)
+            self.assertGreater(len(window.answer_pages),1)
+            self.assertEqual('\n'.join(window.answer_pages),answer)
+            window.expire(window.deadline)
+            self.assertFalse(window.user.IsWindowVisible(window.hwnd))
+            window.replay_answer()
+            self.assertEqual(window.page_index,1)
+            self.assertTrue(window.user.IsWindowVisible(window.hwnd))
+            self.assertGreater(window.deadline-time.monotonic(),14.9)
+        finally:window.close()
+
+    def test_long_code_wrap_preserves_every_character(self):
+        original='    value = '+('abcdefghij'*60)+'\n    return value'
+        pages=paginate_text(original,11,200,3)
+        self.assertGreater(len(pages),1)
+        self.assertEqual(''.join(pages).replace('\n',''),original.replace('\n',''))
     def test_persistent_result_stays_until_hidden_and_status_can_still_expire(self):
         window = Overlay({'font_size':11,'display_seconds':2})
         try:

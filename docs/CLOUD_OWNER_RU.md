@@ -2,8 +2,10 @@
 
 Сервис уже опубликован:
 https://study-tools-cloud-sultan-1109.satinwaterlily4.chatgpt.site
-Статус: /health. Сейчас ready=false: ключ провайдера не добавлен, SERVICE_ENABLED=false.
-Это намеренное состояние до решения владельца, а не обещание бесплатного ИИ.
+Статус: /health. Gemini уже подключён через runtime secret, SERVICE_ENABLED=true.
+Контрольный запрос через готовый EXE и этот сервер вернул B) 4 за 4,28 секунды,
+HTTP 200. Используется gemini-3.5-flash-lite. OpenAI пока не подключён.
+Ниже — порядок будущей смены провайдера/ключа; повторять настройку сейчас не нужно.
 
 На компьютере, скачавшем ZIP, находится только адрес сервиса. При первом запросе
 приложение автоматически получает ограниченный токен установки и защищает его Windows DPAPI.
@@ -22,7 +24,7 @@ https://study-tools-cloud-sultan-1109.satinwaterlily4.chatgpt.site
    через штатные инструменты, а не через публикацию файла.
 3. У существующего сервиса указать секрет OPENAI_API_KEY, AI_PROVIDER=openai,
    AI_MODEL=gpt-5.4-mini и SERVICE_ENABLED=true. Для Gemini вместо этого использовать
-   GEMINI_API_KEY, AI_PROVIDER=gemini, AI_MODEL=gemini-3.8-flash. Сохранить IP_HASH_SECRET
+   GEMINI_API_KEY, AI_PROVIDER=gemini, AI_MODEL=gemini-3.5-flash-lite. Сохранить IP_HASH_SECRET
    и существующие лимиты. Не добавлять оба ключа без необходимости.
 4. После изменения runtime secret развернуть существующую сохранённую версию Sites,
    чтобы применить новый env revision. Не создавать новый Site, адрес должен сохраниться.
@@ -33,7 +35,7 @@ https://study-tools-cloud-sultan-1109.satinwaterlily4.chatgpt.site
 
 После настройки владельцем тот же ZIP начнёт использовать общий сервер на других
 Windows x64 компьютерах без ввода личного API-ключа. Интернет и доступ к серверу нужны.
-До этого можно использовать свой Gemini через Setup-Gemini.cmd или OpenAI через Setup-OpenAI.cmd.
+Свой Gemini также доступен через Setup-Gemini.cmd, OpenAI — через Setup-OpenAI.cmd.
 
 ## Лимиты и данные
 
@@ -72,3 +74,9 @@ cloud-gateway/ в GitHub — очищенное зеркало исходник�
 
 Источники: https://developers.openai.com/api/docs/guides/api-keys
 https://developers.openai.com/api/docs/guides/structured-outputs
+
+Проверено 10 ноября: JSON mode с текстовым контрактом обходит ограничение
+сложности компилятора схем Gemini; валидатор клиента остаётся. Workers-запрос
+использует redirect=manual и отклоняет 3xx: redirect=error здесь не поддерживается.
+Прямой успешный ответ и ответ через общий сервис проверены отдельно. Один 503
+после исправления был настоящей перегрузкой Gemini; гарантий постоянной доступности нет.

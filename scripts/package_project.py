@@ -21,7 +21,7 @@ def source_files():
 
 def package():
     OUT.mkdir(exist_ok=True)
-    helper=ROOT/'screen-helper-portable-v8.4.zip'
+    helper=ROOT/'screen-helper-portable-v8.5.zip'
     native=ROOT/'proctor-lab-windows-v3.zip'
     for source,name in [(helper,'ScreenHelper-Windows-x64.zip'),(native,'ProctorLab-Windows-x64.zip')]:
         if not source.is_file():raise RuntimeError('Build missing: '+source.name)

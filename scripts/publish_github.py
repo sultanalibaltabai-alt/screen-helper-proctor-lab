@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENV = dict(os.environ, GCM_INTERACTIVE='never', GIT_TERMINAL_PROMPT='0')
 ASSETS = ('StudyTools-Windows-x64.zip', 'ScreenHelper-Windows-x64.zip',
           'ProctorLab-Windows-x64.zip', 'Project-Source.zip', 'SHA256SUMS.txt')
-TAG = 'v1.2.0'
+TAG = 'v1.3.0'
 
 
 def run(args, **kwargs):
@@ -114,24 +114,24 @@ def publish(api, repo, path):
     run(['git', 'add', '--', '.'])
     changed = run(['git', 'status', '--porcelain'])
     if changed:
-        run(['git', 'commit', '-m', 'Add full quiz answers and shared cloud gateway'])
+        run(['git', 'commit', '-m', 'Fix Gemini connectivity and add inline full answers'])
     sha = run(['git', 'rev-parse', 'HEAD'])
     run(['git', 'push', '-u', 'origin', 'main'])
     release = find_release(api, path)
     if not release:
         release = api.request(path + '/releases', 'POST', {
-            'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.2.0 — Screen Helper 8.4',
+            'tag_name': TAG, 'target_commitish': sha, 'name': 'Study Tools 1.3.0 — Screen Helper 8.5',
             'draft': True, 'prerelease': False,
-            'body': 'Screen Helper 8.4: full choice text, MSQ, matching, ordering, fill-in blanks, code and drag/drop instructions. '
-                    'Readable scrollable results for 15 seconds; seconds-only waiting indicator. No automatic quiz interaction.\n\n'
+            'body': 'Screen Helper 8.5: full choice text, MSQ, matching, ordering, fill-in blanks, code and drag/drop instructions. '
+                    'White inline text at bottom-left for 15 seconds; Ctrl+Alt+F8 pages through long results; seconds-only waiting indicator. No automatic quiz interaction.\n\n'
                     'Download **ScreenHelper-Windows-x64.zip** for the helper alone, extract ALL files, then run **ScreenHelper/Start.cmd**. '
                     '**StudyTools-Windows-x64.zip** also includes Proctor Lab. Windows x64; Python is included.\n\n'
                     'New installs select the shared cloud service automatically: no provider key is distributed in the ZIP. '
-                    '**The gateway is deployed but the model is NOT enabled yet: the owner has not added a key or funding.** '
+                    '**Gemini is connected. A live synthetic 2+2 request through the new 8.5 portable EXE and gateway returned B) 4 (HTTP 200, 2.38 seconds).** '
                     'See docs/CLOUD_OWNER_RU.md for the one-time server setup. Direct Gemini/OpenAI profiles are still supported.\n\n'
                     'Provider keys remain server-side. Global/per-installation limits protect the shared quota; $5 is spendable API credit, not unlimited access. '
                     'Offline tests, SQLite gateway tests, real cloud connectivity and portable self-checks passed. '
-                    'No live funded model response or second physical PC was tested. No OES compatibility or undetectability guarantee.\n\n'
+                    'OpenAI and a second physical PC were not tested. White text on white backgrounds is difficult for everyone to read; it is not private or excluded from screen capture. No OES compatibility or undetectability guarantee.\n\n'
                     'Source archive and SHA-256 checksums are included.'
         })
     existing = {asset['name']: asset for asset in release.get('assets', [])}
