@@ -1,5 +1,0 @@
-MediaPipe Tasks Vision 1.2.2 (npm @mediapipe/tasks-vision), Apache-2.0.
-Source: https://github.com/google-ai-edge/mediapipe
-Face detector: Google MediaPipe BlazeFace short-range model, float16, version 1.
-https://developers.google.com/edge/mediapipe/solutions/vision/face_detector
-https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite

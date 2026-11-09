@@ -1,7 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test test-core.mjs test-daa.mjs test-extension.mjs test-solver.mjs test-integrity.mjs test-supervision.mjs"
-  }
-}

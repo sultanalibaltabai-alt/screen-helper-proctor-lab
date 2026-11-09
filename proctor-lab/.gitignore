@@ -1,8 +1,0 @@
-native/build/
-native/dist/
-native/*.spec
-native/__pycache__/
-native/*-check.json
-node_modules/
-*.local.json
-native-proof*.json
